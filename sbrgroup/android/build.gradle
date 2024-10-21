@@ -1,19 +1,25 @@
-allprojects {
-    ext.kotlin_version = '2.0.0' // Change here
+buildscript {
+    ext.kotlin_version = '2.0.0' // Change here to your specified Kotlin version
 
     repositories {
         google()
         mavenCentral()
-                jcenter()
-
-    }
-        dependencies {
-       
-
- 
- 
+        jcenter() // Optional, but can be included if you have dependencies from JCenter
     }
 
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.0.2' // Ensure compatibility with Kotlin 2.0.0
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        // Add other classpath dependencies if needed
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        jcenter() // Optional
+    }
 }
 
 rootProject.buildDir = "../build"

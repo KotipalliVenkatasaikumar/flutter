@@ -137,21 +137,21 @@ class ApiService {
     }
   }
 
-  static Future<http.Response> login(
-      String identifier, String password, String androidId) async {
-    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
-      'identifier': identifier,
-      'password': password,
-      'androidId': androidId,
-    });
-  }
-
-  // static Future<http.Response> login(String identifier, String password) async {
+  // static Future<http.Response> login(
+  //     String identifier, String password, String androidId) async {
   //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
   //     'identifier': identifier,
   //     'password': password,
+  //     'androidId': androidId,
   //   });
   // }
+
+  static Future<http.Response> login(String identifier, String password) async {
+    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
+      'identifier': identifier,
+      'password': password,
+    });
+  }
 
   static Future<http.Response> checkForUpdate() async {
     return await getRequest(
@@ -742,5 +742,14 @@ class ApiService {
 
     // Make the HTTP request
     return await getRequest(baseUrl1, endpoint); // Use getRequest
+  }
+
+  static Future<http.Response> fetchScheduleReports(
+    int organizationId,
+    int projectId,
+    String selectedDateRange,
+  ) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/qrreport/getallschedulewithreports?organizationId=$organizationId&projectId=$projectId&range=$selectedDateRange');
   }
 }

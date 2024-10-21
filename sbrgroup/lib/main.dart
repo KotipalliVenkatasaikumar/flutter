@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:ajna/screens/sqflite/database_helper.dart';
+import 'package:ajna/screens/sqflite/schedule.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/gestures.dart';
@@ -19,10 +22,93 @@ import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/profile/forgot_password.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-void main() {
-  runApp(const MyApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Check network connectivity
+  var connectivityResult = await Connectivity().checkConnectivity();
+  if (connectivityResult == ConnectivityResult.none) {
+    // No internet connection
+    runApp(const MyApp()); // Start the app in offline mode or show an error
+  } else {
+    int? userId = await Util.getUserId(); // Ensure this is async if needed
+    // Fetch and store schedules only if userId is available and connected to the internet
+    if (userId != null) {
+      await deleteAllSchedules(); // Clear old schedules
+      await fetchAndStoreSchedules(userId); // Fetch new schedules
+    }
+
+    runApp(const MyApp());
+  }
+}
+
+Future<void> deleteAllSchedules() async {
+  try {
+    await DatabaseHelper.instance.deleteAllSchedules();
+  } catch (e) {
+    print('Error deleting all schedules: $e');
+  }
+}
+
+Future<void> fetchAndStoreSchedules(int userId) async {
+  final response = await ApiService.fetchScanSchedules(userId);
+
+  if (response.statusCode == 200) {
+    final data = json.decode(response.body);
+    if (data.isNotEmpty) {
+      final schedules = data
+          .map<ScanSchedule>((item) => ScanSchedule.fromJson(item))
+          .toList();
+      await processAndStoreSchedules(schedules);
+    } else {
+      print('No data found in the response.');
+    }
+  } else {
+    print('Failed to fetch schedules: ${response.statusCode}');
+    await retryTask(userId);
+  }
+}
+
+Future<void> retryTask(int userId) async {
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    print('Retry attempt $attempt...');
+    await Future.delayed(const Duration(seconds: 5));
+
+    final response = await ApiService.fetchScanSchedules(userId);
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data.isNotEmpty) {
+        final schedules = data
+            .map<ScanSchedule>((item) => ScanSchedule.fromJson(item))
+            .toList();
+        await processAndStoreSchedules(schedules);
+        return;
+      }
+    }
+    print(
+        'Failed to fetch schedules on attempt $attempt: ${response.statusCode}');
+  }
+}
+
+Future<void> processAndStoreSchedules(List<ScanSchedule> schedules) async {
+  final db = await DatabaseHelper.instance.database;
+  final batch = db.batch();
+
+  try {
+    for (final schedule in schedules) {
+      batch.insert(
+        'scan_schedules',
+        schedule.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  } catch (e) {
+    print('Error processing and storing schedules: $e');
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -264,8 +350,8 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text;
       final password = _passwordController.text;
 
-      final response = await ApiService.login(email, password, androidId!);
-      //final response = await ApiService.login(email, password);
+      // final response = await ApiService.login(email, password, androidId!);
+      final response = await ApiService.login(email, password);
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(response.body);

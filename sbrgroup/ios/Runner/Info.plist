@@ -49,5 +49,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<key>UIBackgroundModes</key>
+    <array>
+    <string>fetch</string> <!-- For background fetch -->
+    <string>location</string> <!-- If you need location updates -->
+    </array>
 </dict>
 </plist>

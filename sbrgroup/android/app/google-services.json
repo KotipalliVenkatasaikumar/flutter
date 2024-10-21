@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "974106100799",
+    "project_id": "ajna-2a88c",
+    "storage_bucket": "ajna-2a88c.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:974106100799:android:be2e473ed08bc2913f648a",
+        "android_client_info": {
+          "package_name": "com.example.ajna"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgIo_uHPngPbD8JSXzig-IJJsIHgP31oI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

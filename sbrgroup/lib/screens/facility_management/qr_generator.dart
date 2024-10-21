@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
-
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +14,6 @@ import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-
 import 'map_screen.dart';
 
 class QrGeneratorScreen extends StatefulWidget {
