@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:ajna/screens/facility_management/schedule_with_report.dart';
 import 'package:flutter/material.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
@@ -85,15 +86,29 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
     }
   }
 
-  Future<void> fetchLocations(int projectId) async {
+  // Future<void> fetchLocations(int projectId) async {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (context) => LocationsScreen(
+  //         organizationId: intOrganizationId!,
+  //         projectId: projectId,
+  //         selectedDateRange: selectedDateRange,
+  //         qrgeneratorId: 0,
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  Future<void> fetchReportAndSchedule(int projectId) async {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => LocationsScreen(
+        builder: (context) => ScheduleReportsScreen(
           organizationId: intOrganizationId!,
           projectId: projectId,
           selectedDateRange: selectedDateRange,
-          qrgeneratorId: 0,
+          // qrgeneratorId: 0,
         ),
       ),
     );
@@ -175,7 +190,7 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
                         final project = projects[index];
                         return GestureDetector(
                           onTap: () {
-                            fetchLocations(project.projectId);
+                            fetchReportAndSchedule(project.projectId);
                           },
                           child: Padding(
                             padding: const EdgeInsets.all(10.0),

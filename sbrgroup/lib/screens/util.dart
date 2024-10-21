@@ -105,6 +105,8 @@ class Util {
     }
   }
 
+  
+
   static Future<List<String>?> getIconsAndLabels() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String>? iconsAndLabels = prefs.getStringList('iconsAndLabels');

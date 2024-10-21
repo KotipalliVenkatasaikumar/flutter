@@ -11,7 +11,6 @@ import 'success_screen.dart';
 
 class SelfieCaptureScreen extends StatefulWidget {
   final Map<String, dynamic> scannedData;
-
   SelfieCaptureScreen({required this.scannedData});
 
   @override
@@ -255,21 +254,22 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
             onPressed: _isSubmitting
                 ? null
                 : () async {
-                    await _initializeCamera(); // Initialize camera directly
+                    await _initializeCamera();
                   },
             style: ElevatedButton.styleFrom(
               padding: EdgeInsets.symmetric(
-                horizontal: screenSize.width * 0.15, // Dynamic padding
-                vertical: screenSize.height * 0.02, // Dynamic padding
+                horizontal: screenSize.width * 0.15,
+                vertical: screenSize.height * 0.02,
               ),
             ),
             child: Text(
               _selfie == null ? 'Capture Image' : 'Retake Image',
               style: TextStyle(
-                  fontSize: screenSize.width * 0.045), // Dynamic font size
+                fontSize: screenSize.width * 0.045,
+              ),
             ),
           ),
-          SizedBox(height: screenSize.height * 0.03), // Dynamic spacing
+          SizedBox(height: screenSize.height * 0.03),
           ElevatedButton(
             onPressed: _isSubmitting || _selfie == null
                 ? null
@@ -277,23 +277,25 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
                     await _submitSelfie();
                   },
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  Colors.green, // Set the background color to green
+              backgroundColor: Colors.green,
               padding: EdgeInsets.symmetric(
-                horizontal: screenSize.width * 0.15, // Dynamic padding
-                vertical: screenSize.height * 0.02, // Dynamic padding
+                horizontal: screenSize.width * 0.15,
+                vertical: screenSize.height * 0.02,
               ),
             ),
-            child: Text(
-              'Submit Image',
-              style: TextStyle(
-                fontSize: screenSize.width * 0.045, // Dynamic font size
-                color: Colors
-                    .white, // Ensure the text is visible on the green background
-              ),
-            ),
+            child: _isSubmitting
+                ? const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        Color.fromARGB(255, 162, 158, 158)),
+                  ) // Show spinner while submitting
+                : Text(
+                    'Submit Image',
+                    style: TextStyle(
+                      fontSize: screenSize.width * 0.045,
+                      color: Colors.white,
+                    ),
+                  ),
           ),
-
           SizedBox(height: screenSize.height * 0.03), // Dynamic spacing
           if (_statusMessage.isNotEmpty) ...[
             Text(
