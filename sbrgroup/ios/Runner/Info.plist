@@ -52,8 +52,9 @@
 
 	<key>UIBackgroundModes</key>
     <array>
-    <string>fetch</string> <!-- For background fetch -->
-    <string>location</string> <!-- If you need location updates -->
+        <string>fetch</string> <!-- For background data fetch -->
+        <string>processing</string> <!-- For background processing tasks -->
+        <string>location</string> <!-- If you're using location updates -->
     </array>
 </dict>
 </plist>

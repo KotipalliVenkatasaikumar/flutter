@@ -55,6 +55,8 @@ android {
 
 dependencies {
     implementation "androidx.work:work-runtime-ktx:2.8.1" // Ensure this is the same version
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version" // Ensure this is correct
+    implementation "androidx.work:work-runtime-ktx:2.7.1" // Adjust version as needed
 }
 
 flutter {
