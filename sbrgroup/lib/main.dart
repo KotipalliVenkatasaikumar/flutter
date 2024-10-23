@@ -24,34 +24,33 @@ import 'package:ajna/screens/util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:workmanager/workmanager.dart';
 
-const String taskName = "dailyApiTask";
-const int targetHour = 11; // Set to 11 AM
-const int targetMinute = 10; // Set to 10 minutes past the hour
-const int timeRange =
-    5; // Allowable time range in minutes (e.g., between 11:10 AM and 11:15 AM)
+// const String taskName = "dailyApiTask";
+// const int targetHour = 11; // Set to 11 AM
+// const int targetMinute = 10; // Set to 10 minutes past the hour
+// const int timeRange =
+//     5; // Allowable time range in minutes (e.g., between 11:10 AM and 11:15 AM)
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Check network connectivity
-  var connectivityResult = await Connectivity().checkConnectivity();
-  if (connectivityResult == ConnectivityResult.none) {
-    // No internet connection
-    runApp(const MyApp()); // Start the app in offline mode or show an error
-  } else {
-    int? userId = await Util.getUserId(); // Ensure this is async if needed
-    // Fetch and store schedules only if userId is available and connected to the internet
-    if (userId != null) {
-      await deleteAllSchedules(); // Clear old schedules
-      await fetchAndStoreSchedules(userId); // Fetch new schedules
-    }
+  // // Check network connectivity
+  // var connectivityResult = await Connectivity().checkConnectivity();
+  // if (connectivityResult == ConnectivityResult.none) {
+  //   // No internet connection
+  //   runApp(const MyApp()); // Start the app in offline mode or show an error
+  // } else {
+  //   int? userId = await Util.getUserId(); // Ensure this is async if needed
+  //   // Fetch and store schedules only if userId is available and connected to the internet
+  //   if (userId != null) {
+  //     await deleteAllSchedules(); // Clear old schedules
+  //     await fetchAndStoreSchedules(userId); // Fetch new schedules
+  //   }
 
-    runApp(const MyApp());
-  }
+  //   runApp(const MyApp());
+  // }
+  runApp(const MyApp());
 }
-
 // void main() {
 //   WidgetsFlutterBinding.ensureInitialized();
 //   initializeWorkManager(); // Initialize WorkManager

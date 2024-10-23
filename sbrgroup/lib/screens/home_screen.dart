@@ -430,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (iconLabels != null) {
       for (var predefinedIcon in predefinedIcons) {
-        if (staticLabels.contains(predefinedIcon['label'])) {
+        if (iconLabels.contains(predefinedIcon['label'])) {
           matchedIcons.add(predefinedIcon);
           print(matchedIcons);
         }
