@@ -4,7 +4,7 @@ description: "A new Flutter project."
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.1
+version: 1.0.0
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -51,10 +51,13 @@ dependencies:
   font_awesome_flutter: ^10.7.0
   connectivity_plus: ^3.0.6
   flutter_background_service: ^0.1.0
-  workmanager: ^0.5.2
   sqflite: ^2.0.2+2
   timezone: ^0.9.4
   android_alarm_manager_plus: ^3.0.3
+  firebase_core: ^2.14.0
+  firebase_messaging: ^14.6.0
+  image: ^4.0.15
+  workmanager: 0.5.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

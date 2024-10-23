@@ -137,21 +137,21 @@ class ApiService {
     }
   }
 
-  // static Future<http.Response> login(
-  //     String identifier, String password, String androidId) async {
-  //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
-  //     'identifier': identifier,
-  //     'password': password,
-  //     'androidId': androidId,
-  //   });
-  // }
-
-  static Future<http.Response> login(String identifier, String password) async {
+  static Future<http.Response> login(
+      String identifier, String password, String androidId) async {
     return await postRequest(baseUrl1, 'api/user/user/mob/login', {
       'identifier': identifier,
       'password': password,
+      'androidId': androidId,
     });
   }
+
+  // static Future<http.Response> login(String identifier, String password) async {
+  //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
+  //     'identifier': identifier,
+  //     'password': password,
+  //   });
+  // }
 
   static Future<http.Response> checkForUpdate() async {
     return await getRequest(
@@ -751,5 +751,39 @@ class ApiService {
   ) async {
     return await getRequest(baseUrl2,
         'api/facility-management/qrreport/getallschedulewithreports?organizationId=$organizationId&projectId=$projectId&range=$selectedDateRange');
+  }
+
+  static Future<http.Response> submitIssue(
+      String issueData, File imageFile) async {
+    final url = Uri.parse('${baseUrl2}api/project/issues/save');
+
+    var request = http.MultipartRequest('POST', url);
+
+    // Change the key from 'qrTransactionDataBean' to 'issues'
+    request.fields['issues'] = issueData;
+
+    if (imageFile != null && await imageFile.exists()) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'imageFile', // Ensure this key matches what the backend expects
+          imageFile.path,
+          contentType: MediaType(
+            'image',
+            path.extension(imageFile.path).replaceFirst('.', ''),
+          ),
+        ),
+      );
+    }
+
+    request.headers['Authorization'] = 'Bearer $accessToken';
+
+    try {
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      return response;
+    } catch (e) {
+      throw Exception('Error during upload: $e');
+    }
   }
 }

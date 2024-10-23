@@ -246,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'icon': null,
       'imagePath': 'lib/assets/images/account.png',
       'label': 'Stored Data',
-      'onTap': () => ReportsHomeScreen(),
+      'onTap': () => SchedulesScreen(),
     },
   ];
 
@@ -430,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (iconLabels != null) {
       for (var predefinedIcon in predefinedIcons) {
-        if (iconLabels.contains(predefinedIcon['label'])) {
+        if (staticLabels.contains(predefinedIcon['label'])) {
           matchedIcons.add(predefinedIcon);
           print(matchedIcons);
         }

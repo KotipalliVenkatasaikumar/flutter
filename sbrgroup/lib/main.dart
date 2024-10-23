@@ -24,6 +24,13 @@ import 'package:ajna/screens/util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:workmanager/workmanager.dart';
+
+const String taskName = "dailyApiTask";
+const int targetHour = 11; // Set to 11 AM
+const int targetMinute = 10; // Set to 10 minutes past the hour
+const int timeRange =
+    5; // Allowable time range in minutes (e.g., between 11:10 AM and 11:15 AM)
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +52,56 @@ Future<void> main() async {
   }
 }
 
+// void main() {
+//   WidgetsFlutterBinding.ensureInitialized();
+//   initializeWorkManager(); // Initialize WorkManager
+//   runApp(MyApp());
+// }
+
+// void initializeWorkManager() {
+//   Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+//   // Register a periodic task that runs every 24 hours
+//   Workmanager().registerPeriodicTask(
+//     "uniqueName", // Unique task name
+//     taskName, // Task identifier
+//     frequency: Duration(hours: 24), // Runs once every 24 hours
+//     initialDelay:
+//         Duration(hours: 24), // Delay to ensure it starts at 11:10 AM tomorrow
+//     constraints: Constraints(
+//       networkType: NetworkType.not_required, // Run offline or online
+//       requiresBatteryNotLow: true, // Optional: Run only when battery is not low
+//     ),
+//   );
+// }
+
+// void callbackDispatcher() {
+//   Workmanager().executeTask((task, inputData) async {
+//     if (task == taskName) {
+//       DateTime now = DateTime.now();
+//       if (isAround1110AM(now)) {
+//         await performApiCall(); // Only call the API around 11:10 AM
+//       }
+//     }
+//     return Future.value(true);
+//   });
+// }
+
+// // Check if current time is around 11:10 AM
+// bool isAround1110AM(DateTime currentTime) {
+//   return currentTime.hour == targetHour &&
+//       currentTime.minute >= targetMinute &&
+//       currentTime.minute <= (targetMinute + timeRange);
+// }
+
+// // Example API call function
+// Future<void> performApiCall() async {
+//   int? userId = await Util.getUserId();
+//   if (userId != null) {
+//     await deleteAllSchedules(); // Clear old schedules
+//     await fetchAndStoreSchedules(userId); // Fetch new schedules
+//   }
+// }
+
 Future<void> deleteAllSchedules() async {
   try {
     await DatabaseHelper.instance.deleteAllSchedules();
@@ -55,7 +112,6 @@ Future<void> deleteAllSchedules() async {
 
 Future<void> fetchAndStoreSchedules(int userId) async {
   final response = await ApiService.fetchScanSchedules(userId);
-
   if (response.statusCode == 200) {
     final data = json.decode(response.body);
     if (data.isNotEmpty) {
@@ -76,7 +132,6 @@ Future<void> retryTask(int userId) async {
   for (int attempt = 1; attempt <= 2; attempt++) {
     print('Retry attempt $attempt...');
     await Future.delayed(const Duration(seconds: 5));
-
     final response = await ApiService.fetchScanSchedules(userId);
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -96,7 +151,6 @@ Future<void> retryTask(int userId) async {
 Future<void> processAndStoreSchedules(List<ScanSchedule> schedules) async {
   final db = await DatabaseHelper.instance.database;
   final batch = db.batch();
-
   try {
     for (final schedule in schedules) {
       batch.insert(
@@ -350,8 +404,8 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text;
       final password = _passwordController.text;
 
-      // final response = await ApiService.login(email, password, androidId!);
-      final response = await ApiService.login(email, password);
+      final response = await ApiService.login(email, password, androidId!);
+      // final response = await ApiService.login(email, password);
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(response.body);
