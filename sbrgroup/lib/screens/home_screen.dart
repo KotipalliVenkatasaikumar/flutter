@@ -16,8 +16,8 @@ import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/app_bar.dart';
 import 'package:ajna/screens/crm/crm_home_screen.dart';
 import 'package:ajna/screens/crm/raise-issue.dart';
-import 'package:ajna/screens/facility_management/attendace_report.dart';
-import 'package:ajna/screens/facility_management/attendance.dart';
+import 'package:ajna/screens/attendace/attendace_report.dart';
+import 'package:ajna/screens/attendace/attendance.dart';
 import 'package:ajna/screens/facility_management/customer_consumption.dart';
 import 'package:ajna/screens/facility_management/qr_generator.dart';
 import 'package:ajna/screens/facility_management/qr_schedule.dart';
@@ -257,56 +257,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // _checkFetchData(); // Check if we need to fetch data
-    // _fetchData();
+
     _initializeData();
     _checkForUpdate();
   }
-
-  // Future<void> _checkFetchData() async {
-  //   final SharedPreferences prefs = await SharedPreferences.getInstance();
-  //   final String? lastFetchDate = prefs.getString('lastFetchDate');
-
-  //   // Get the current date and time in the Asia/Kolkata time zone
-  //   final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-
-  //   // If last fetch date is stored, parse it
-  //   final tz.TZDateTime fetchDate = lastFetchDate != null
-  //       ? tz.TZDateTime.parse(tz.local, lastFetchDate)
-  //       : tz.TZDateTime(tz.local, 1900, 1, 1); // Default date if not set
-
-  //   // Create a TZDateTime for today at 22:30 (10:30 PM)
-  //   final tz.TZDateTime fetchTimeToday =
-  //       tz.TZDateTime(tz.local, now.year, now.month, now.day, 23, 30);
-
-  //   // Check if we need to fetch data:
-  //   // 1. If the last fetch date is not today
-  //   // 2. If the current time is past 22:30
-  //   if ((fetchDate.day != now.day ||
-  //           fetchDate.month != now.month ||
-  //           fetchDate.year != now.year) &&
-  //       now.isAfter(fetchTimeToday)) {
-  //     await _fetchData(); // Fetch data if it hasn't been fetched today
-
-  //     // Update the last fetch date in SharedPreferences
-  //     prefs.setString('lastFetchDate', now.toIso8601String());
-  //   }
-  // }
-
-  // Future<void> _fetchData() async {
-  //   int? userId = Util.getUserId() as int?;
-  //   if (userId != null) {
-  //     await DatabaseHelper.instance.fetchDataAndStore(userId);
-
-  //     // // Save the current date as the last fetch date after successful fetch
-  //     // final SharedPreferences prefs = await SharedPreferences.getInstance();
-  //     // prefs.setString('lastFetchDate', DateTime.now().toIso8601String());
-
-  //     print("Data fetched for userId: $userId");
-  //   } else {
-  //     print("User is not logged in.");
-  //   }
-  // }
 
   Future<void> _checkForUpdate() async {
     try {
@@ -430,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (iconLabels != null) {
       for (var predefinedIcon in predefinedIcons) {
-        if (iconLabels.contains(predefinedIcon['label'])) {
+        if (staticLabels.contains(predefinedIcon['label'])) {
           matchedIcons.add(predefinedIcon);
           print(matchedIcons);
         }

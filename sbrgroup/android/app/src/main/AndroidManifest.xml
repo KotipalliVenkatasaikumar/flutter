@@ -50,24 +50,9 @@
             android:name="flutterEmbedding"
             android:value="2"/>
 
-        
-        <!-- Required for reboot task registration -->
-        <receiver
-            android:name="androidx.work.impl.utils.PackageManagerHelper$BootReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-            </intent-filter>
-        </receiver>
+              <meta-data android:name="com.google.android.geo.API_KEY" 
+                        android:value="AIzaSyADA4aojv4nBd8I98qh2VcnzhrfnSREikk"/>
 
-        <receiver
-            android:name="dev.fluttercommunity.plus.androidalarmmanager.AlarmBroadcastReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-            </intent-filter>
-        </receiver>
 
     </application>
     

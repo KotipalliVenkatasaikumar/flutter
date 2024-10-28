@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
-import 'package:ajna/screens/facility_management/attendace_scan.dart';
+import 'package:ajna/screens/attendace/attendace_scan.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -129,7 +129,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             children: [
               // PNG Icon
               Image.asset(
-                'lib/assets/images/.png', // Ensure this path matches your asset path
+                'lib/assets/images/ajna.png', // Ensure this path matches your asset path
                 width: screenWidth * 0.3, // Responsive width
                 // height: screenWidth * 0.3,
               ),
