@@ -5,6 +5,7 @@ import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
@@ -30,6 +31,7 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
   final TextEditingController _locationController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey _qrKey = GlobalKey();
+
   String? _qrData;
 
   int? intRoleId;
@@ -739,6 +741,12 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
   }
 
   Future<void> _downloadQrCode() async {
+    final logoBytes =
+        await rootBundle.load('lib/assets/images/corenuts-logo.png');
+    final logoData = logoBytes.buffer.asUint8List();
+
+    final ajnaLogoBytes = await rootBundle.load('lib/assets/images/ajna.png');
+    final ajnaLogoData = ajnaLogoBytes.buffer.asUint8List();
     if (await _requestPermission(Permission.storage)) {
       try {
         final RenderRepaintBoundary boundary =
@@ -755,8 +763,14 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
               return pw.Column(
                 mainAxisAlignment: pw.MainAxisAlignment.center,
                 children: [
-                  pw.Image(pw.MemoryImage(pngBytes)),
+                  pw.Image(pw.MemoryImage(ajnaLogoData), width: 130),
+                  // pw.SizedBox(height: 30), // Space below the ajna logo
+                  pw.Image(pw.MemoryImage(pngBytes)), // Main image
                   pw.Spacer(),
+                  pw.Image(pw.MemoryImage(logoData), width: 200),
+                  pw.SizedBox(
+                      height:
+                          15), // Space between logo and text // Logo image from assets
                   pw.RichText(
                     text: const pw.TextSpan(
                       children: [
@@ -771,6 +785,9 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                       ],
                     ),
                   ),
+                  pw.SizedBox(height: 10), // Space between logo and text
+                  pw.Text('Contact: info@corenuts.com',
+                      style: pw.TextStyle(fontSize: 10)), // Email text
                 ],
               );
             },
@@ -814,6 +831,12 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
   }
 
   Future<void> _shareQrCode() async {
+    final logoBytes =
+        await rootBundle.load('lib/assets/images/corenuts-logo.png');
+    final logoData = logoBytes.buffer.asUint8List();
+
+    final ajnaLogoBytes = await rootBundle.load('lib/assets/images/ajna.png');
+    final ajnaLogoData = ajnaLogoBytes.buffer.asUint8List();
     if (await _requestPermission(Permission.storage)) {
       try {
         final RenderRepaintBoundary boundary =
@@ -830,8 +853,14 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
               return pw.Column(
                 mainAxisAlignment: pw.MainAxisAlignment.center,
                 children: [
-                  pw.Image(pw.MemoryImage(pngBytes!)),
+                  pw.Image(pw.MemoryImage(ajnaLogoData), width: 130),
+                  // pw.SizedBox(height: 30), // Space below the ajna logo
+                  pw.Image(pw.MemoryImage(pngBytes!)), // Main image
                   pw.Spacer(),
+                  pw.Image(pw.MemoryImage(logoData), width: 200),
+                  pw.SizedBox(
+                      height:
+                          20), // Space between logo and text // Logo image from assets
                   pw.RichText(
                     text: const pw.TextSpan(
                       children: [
@@ -846,6 +875,9 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                       ],
                     ),
                   ),
+                  pw.SizedBox(height: 10), // Space between logo and text
+                  pw.Text('Contact: info@corenuts.com',
+                      style: pw.TextStyle(fontSize: 10)), // Email text
                 ],
               );
             },

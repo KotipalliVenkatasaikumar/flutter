@@ -137,21 +137,21 @@ class ApiService {
     }
   }
 
-  static Future<http.Response> login(
-      String identifier, String password, String androidId) async {
-    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
-      'identifier': identifier,
-      'password': password,
-      'androidId': androidId,
-    });
-  }
-
-  // static Future<http.Response> login(String identifier, String password) async {
+  // static Future<http.Response> login(
+  //     String identifier, String password, String androidId) async {
   //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
   //     'identifier': identifier,
   //     'password': password,
+  //     'androidId': androidId,
   //   });
   // }
+
+  static Future<http.Response> login(String identifier, String password) async {
+    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
+      'identifier': identifier,
+      'password': password,
+    });
+  }
 
   static Future<http.Response> checkForUpdate() async {
     return await getRequest(
@@ -785,5 +785,43 @@ class ApiService {
     } catch (e) {
       throw Exception('Error during upload: $e');
     }
+  }
+
+  static Future<http.Response> fetchAttendanceReport(
+      int userId,
+      int organizationId,
+      String selectedLocation,
+      String selectedShift,
+      String selectedDateRange) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/attendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftId=$selectedShift&locationId=$selectedLocation&range=$selectedDateRange');
+  }
+
+  static Future<http.Response> fetchAttendanceLocation(
+      int? organizationId) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/facility/getQrByOrganizationId?organizationId=$organizationId');
+  }
+
+  static Future<http.Response> fetchshiftData() async {
+    return await getRequest(
+        baseUrl2, 'api/user/commonreferencedetails/types/Shift_Timings');
+  }
+
+  // static fetchAttendanceDetails(int i, int j, String selectedLocation, String selectedShift, String selectedDateRange) {}
+
+  static Future<http.Response> fetchAttendanceDetails(
+      int userId,
+      String userName,
+      String attendanceStatus,
+      String selectedLocation,
+      String selectedShift,
+      String selectedDateRange,
+      String page,
+      int size) async {
+    return await getRequest(
+        baseUrl2,
+        // 'api/facility-management/attendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftId=$selectedShift&locationId=$selectedLocation&range=$selectedDateRange'
+        'api/facility-management/attendance/allAttendance?userName=$userName&userId=$userId&page=$page&size=$size&&attendanceStatus=$attendanceStatus&shiftId=$selectedShift&locationId=$selectedLocation&range=$selectedDateRange');
   }
 }
