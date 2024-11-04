@@ -8,7 +8,6 @@ import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-
 class Attendance {
   final int count;
   final String attendanceStatus;
@@ -151,7 +150,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   String selectedShift = '0';
   String attendanceStatus = '';
   String searchQuery = '';
-
+  String selectedStatus = '';
   String page = '0';
   int size = 10;
   final ScrollController _scrollController = ScrollController();
@@ -191,17 +190,26 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   }
 
   void _scrollListener() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 100) {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
       setState(() {
         size += 10; // Increase the size by 10 each time
       });
 
-      // Check if the list has records to get the last attendance status
-      String statusToFetch = attendaceReportDetails.isNotEmpty
-          ? attendaceReportDetails
-              .last.attendanceStatus // Get the last record's attendance status
-          : "Present"; // Default status if the list is empty
+      // // Determine the status to fetch based on the dashboard selection and list of records
+      String statusToFetch = '';
+      if (attendaceReportDetails.isNotEmpty) {
+        final uniqueStatuses = attendaceReportDetails
+            .map((record) => record.attendanceStatus)
+            .toSet(); // Get unique statuses
+
+        // If only one unique status exists, use it; otherwise, set to '' to fetch all records
+        if (uniqueStatuses.length == 1) {
+          statusToFetch = uniqueStatuses.first;
+        } else {
+          print("else" + statusToFetch);
+        }
+      }
 
       fetchAttendanceDetails(statusToFetch, '');
     }
@@ -469,15 +477,24 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                               value: selectedLocation != '0'
                                   ? selectedLocation
                                   : null,
-                              items: locations.map((location) {
-                                return DropdownMenuItem<String>(
-                                  value: location.id.toString(),
+                              items: [
+                                DropdownMenuItem<String>(
+                                  value: '0',
                                   child: Text(
-                                    location.location,
+                                    'All',
                                     style: TextStyle(color: Colors.black87),
                                   ),
-                                );
-                              }).toList(),
+                                ),
+                                ...locations.map((location) {
+                                  return DropdownMenuItem<String>(
+                                    value: location.id.toString(),
+                                    child: Text(
+                                      location.location,
+                                      style: TextStyle(color: Colors.black87),
+                                    ),
+                                  );
+                                }).toList(),
+                              ],
                               onChanged: (value) {
                                 setState(() {
                                   selectedLocation = value!;
@@ -542,15 +559,24 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                               alignment: AlignmentDirectional.bottomStart,
                               value:
                                   selectedShift != '0' ? selectedShift : null,
-                              items: shifts.map((shift) {
-                                return DropdownMenuItem<String>(
-                                  value: shift.id.toString(),
+                              items: [
+                                const DropdownMenuItem<String>(
+                                  value: '0',
                                   child: Text(
-                                    '${shift.commonRefKey} - ${shift.commonRefValue}',
+                                    'All',
                                     style: TextStyle(color: Colors.black87),
                                   ),
-                                );
-                              }).toList(),
+                                ),
+                                ...shifts.map((shift) {
+                                  return DropdownMenuItem<String>(
+                                    value: shift.id.toString(),
+                                    child: Text(
+                                      '${shift.commonRefKey} - ${shift.commonRefValue}',
+                                      style: TextStyle(color: Colors.black87),
+                                    ),
+                                  );
+                                }).toList(),
+                              ],
                               onChanged: (value) {
                                 setState(() {
                                   selectedShift = value!;
@@ -579,84 +605,116 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 15),
                     CustomDateRangePicker(
                       onDateRangeSelected: _onDateRangeSelected,
                       selectedDateRange: selectedDateRange,
                     ),
                     const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              fetchAttendanceDetails("Logged_In", '');
-                            },
-                            child: Card(
-                              color: Colors.green.shade100,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Text(
-                                      'Present',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  selectedStatus = 'Logged In';
+                                });
+                                fetchAttendanceDetails(selectedStatus, '');
+                              },
+                              child: Card(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 2,
+                                color: Colors.green.shade50,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 10, horizontal: 8),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.login,
+                                          color: Colors.green.shade600,
+                                          size: 24),
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'Logged In',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.black87,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Logged_In', orElse: () => Attendance(count: 0, attendanceStatus: 'Logged_In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Logged In', orElse: () => Attendance(count: 0, attendanceStatus: 'Logged In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              fetchAttendanceDetails('Not_Logged_In', '');
-                            },
-                            child: Card(
-                              color: Colors.red.shade100,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Text(
-                                      'Absent',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  selectedStatus = 'Not Logged In';
+                                });
+                                fetchAttendanceDetails(selectedStatus, '');
+                              },
+                              child: Card(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 2,
+                                color: Colors.red.shade50,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 10, horizontal: 8),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.block,
+                                          color: Colors.red.shade600, size: 24),
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'Not Logged In',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.black87,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Not_Logged_In', orElse: () => Attendance(count: 0, attendanceStatus: 'Not_Logged_In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Not Logged In', orElse: () => Attendance(count: 0, attendanceStatus: 'Not Logged In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.red,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+
                     const SizedBox(height: 15),
                     Padding(
                       padding: const EdgeInsets.symmetric(
@@ -677,16 +735,19 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                               ),
                               onChanged: (value) {
                                 setState(() {
-                                  searchQuery =
-                                      value; // Update the search query
+                                  searchQuery = value;
                                 });
-                                fetchAttendanceDetails(
-                                    attendaceReportDetails
-                                        .first.attendanceStatus,
-                                    searchQuery); // Call API with search query
+                                if (searchQuery.length >= 3 ||
+                                    searchQuery.length == 0) {
+                                  fetchAttendanceDetails(
+                                    selectedStatus,
+                                    searchQuery,
+                                  );
+                                }
                               },
                             ),
                           ),
+
                           const SizedBox(
                               width:
                                   8.0), // Space between the TextField and Button
@@ -733,23 +794,29 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        record.userName,
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
+                                      Expanded(
+                                        child: Text(
+                                          record.userName,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                          overflow: TextOverflow
+                                              .ellipsis, // Prevent overflow
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
                                       Text(
                                         record.attendanceStatus,
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
                                           color: record.attendanceStatus ==
-                                                  "Logged_In"
+                                                  "Logged In"
                                               ? Colors.green
-                                              : Colors.redAccent,
+                                              : const Color.fromARGB(
+                                                  255, 241, 58, 58),
                                         ),
                                       ),
                                     ],
@@ -759,33 +826,46 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.login,
-                                              color: Colors.blueAccent,
-                                              size: 18),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            'In: ${record.attendanceInTime} (${record.logInLocationName})',
-                                            style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.black54),
-                                          ),
-                                        ],
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.login,
+                                                color: Colors.blueAccent,
+                                                size: 18),
+                                            const SizedBox(width: 2),
+                                            Expanded(
+                                              child: Text(
+                                                'In: ${record.attendanceInTime} (${record.logInLocationName})',
+                                                style: TextStyle(
+                                                    fontSize: 14,
+                                                    color: Colors.black54),
+                                                overflow: TextOverflow
+                                                    .ellipsis, // Prevent overflow
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.logout,
-                                              color: Colors.redAccent,
-                                              size: 18),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            'Out: ${record.attendanceOutTime} (${record.logOutLocationName})',
-                                            style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.black54),
-                                          ),
-                                        ],
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.logout,
+                                                color: Colors.redAccent,
+                                                size: 18),
+                                            const SizedBox(width: 2),
+                                            Expanded(
+                                              child: Text(
+                                                'Out: ${record.attendanceOutTime} (${record.logOutLocationName})',
+                                                style: TextStyle(
+                                                    fontSize: 14,
+                                                    color: Colors.black54),
+                                                overflow: TextOverflow
+                                                    .ellipsis, // Prevent overflow
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -793,13 +873,13 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                   Divider(color: Colors.grey[300]),
                                   const SizedBox(height: 6.0),
                                   Text(
-                                    'In Date: ${record.attendanceInDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceInDate!) : "Not Available"}',
+                                    'In Date: ${record.attendanceInDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceInDate!) : "--"}',
                                     style: TextStyle(
                                         fontSize: 14, color: Colors.black54),
                                   ),
                                   const SizedBox(height: 2.0),
                                   Text(
-                                    'Out Date: ${record.attendanceOutDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceOutDate!) : "Not Available"}',
+                                    'Out Date: ${record.attendanceOutDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceOutDate!) : "--"}',
                                     style: TextStyle(
                                         fontSize: 14, color: Colors.black54),
                                   ),
