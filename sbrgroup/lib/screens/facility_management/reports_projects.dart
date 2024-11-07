@@ -123,6 +123,10 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
   //   );
   // }
 
+  Future<void> _refreshData() async {
+    await initializeData();
+  }
+
   void _onDateRangeSelected(
       DateTime startDate, DateTime endDate, String range) {
     setState(() {
@@ -161,119 +165,122 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
                 fontSize: 16,
                 fontWeight: FontWeight.bold)),
       ),
-      body: Stack(
-        children: [
-          if (isLoading)
-            const Center(child: CircularProgressIndicator())
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 30, 10, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CustomDateRangePicker(
-                    onDateRangeSelected: _onDateRangeSelected,
-                    selectedDateRange:
-                        selectedDateRange, // Pass the selectedDateRange
-                  ),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: ListView.builder(
-                      // gridDelegate:
-                      //     const SliverGridDelegateWithFixedCrossAxisCount(
-                      //   crossAxisCount: 1,
-                      //   crossAxisSpacing: 10.0,
-                      //   mainAxisSpacing: 10.0,
-                      // ),
-                      itemCount: projects.length,
-                      itemBuilder: (context, index) {
-                        final project = projects[index];
-                        return GestureDetector(
-                          onTap: () {
-                            fetchReportAndSchedule(project.projectId);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: project.status == 'Yes'
-                                    ? Colors.green
-                                    : Colors.red,
-                                borderRadius: BorderRadius.circular(10.0),
-                              ),
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: [
-                                  // const Text(
-                                  //   'Project Name: ',
-                                  //   style: TextStyle(
-                                  //       color: Colors.black, fontSize: 14),
-                                  //   textAlign: TextAlign.center,
-                                  // ),
-                                  // Text(
-                                  //   project.projectName,
-                                  //   style: const TextStyle(
-                                  //       color: Colors.white, fontSize: 14),
-                                  //   textAlign: TextAlign.center,
-                                  // ),
-                                  Row(
-                                    children: [
-                                      const Text(
-                                        'Project: ',
-                                        style: TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(width: 4.0),
-                                      Expanded(
-                                        child: Text(
-                                          project.projectName,
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14),
-                                          softWrap: true,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 2,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8.0),
-                                  Row(
-                                    children: [
-                                      const Text(
-                                        'Scan Status: ',
-                                        style: TextStyle(
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: Stack(
+          children: [
+            if (isLoading)
+              const Center(child: CircularProgressIndicator())
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 30, 10, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CustomDateRangePicker(
+                      onDateRangeSelected: _onDateRangeSelected,
+                      selectedDateRange:
+                          selectedDateRange, // Pass the selectedDateRange
+                    ),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: ListView.builder(
+                        // gridDelegate:
+                        //     const SliverGridDelegateWithFixedCrossAxisCount(
+                        //   crossAxisCount: 1,
+                        //   crossAxisSpacing: 10.0,
+                        //   mainAxisSpacing: 10.0,
+                        // ),
+                        itemCount: projects.length,
+                        itemBuilder: (context, index) {
+                          final project = projects[index];
+                          return GestureDetector(
+                            onTap: () {
+                              fetchReportAndSchedule(project.projectId);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(10.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: project.status == 'Yes'
+                                      ? Colors.green
+                                      : Colors.red,
+                                  borderRadius: BorderRadius.circular(10.0),
+                                ),
+                                padding: const EdgeInsets.all(8.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    // const Text(
+                                    //   'Project Name: ',
+                                    //   style: TextStyle(
+                                    //       color: Colors.black, fontSize: 14),
+                                    //   textAlign: TextAlign.center,
+                                    // ),
+                                    // Text(
+                                    //   project.projectName,
+                                    //   style: const TextStyle(
+                                    //       color: Colors.white, fontSize: 14),
+                                    //   textAlign: TextAlign.center,
+                                    // ),
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          'Project: ',
+                                          style: TextStyle(
                                             color: Colors.black,
                                             fontSize: 14,
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                      const SizedBox(width: 4.0),
-                                      Text(
-                                        project.status,
-                                        style: const TextStyle(
-                                            color: Color.fromARGB(
-                                                255, 255, 255, 255),
-                                            fontSize: 14),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(width: 4.0),
+                                        Expanded(
+                                          child: Text(
+                                            project.projectName,
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14),
+                                            softWrap: true,
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8.0),
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          'Scan Status: ',
+                                          style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(width: 4.0),
+                                        Text(
+                                          project.status,
+                                          style: const TextStyle(
+                                              color: Color.fromARGB(
+                                                  255, 255, 255, 255),
+                                              fontSize: 14),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         padding: EdgeInsets.zero,

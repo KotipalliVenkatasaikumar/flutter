@@ -6,6 +6,8 @@ import 'package:ajna/screens/sqflite/schedule.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter/services.dart';
@@ -25,6 +27,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'screens/notification/notification_service.dart';
+
 // const String taskName = "dailyApiTask";
 // const int targetHour = 11; // Set to 11 AM
 // const int targetMinute = 10; // Set to 10 minutes past the hour
@@ -33,6 +37,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  // await NotificationService.instance.initialize();
+
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // // Check network connectivity
   // var connectivityResult = await Connectivity().checkConnectivity();
@@ -51,6 +59,12 @@ Future<void> main() async {
   // }
   runApp(const MyApp());
 }
+
+// Background message handler
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print('Handling a background message: ${message.messageId}');
+}
+
 // void main() {
 //   WidgetsFlutterBinding.ensureInitialized();
 //   initializeWorkManager(); // Initialize WorkManager
@@ -403,8 +417,8 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text;
       final password = _passwordController.text;
 
-      // final response = await ApiService.login(email, password, androidId!);
-      final response = await ApiService.login(email, password);
+      final response = await ApiService.login(email, password, androidId!);
+      // final response = await ApiService.login(email, password);
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(response.body);
