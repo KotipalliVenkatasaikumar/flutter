@@ -52,8 +52,12 @@
 
 	<key>UIBackgroundModes</key>
     <array>
-    <string>fetch</string> <!-- For background fetch -->
-    <string>location</string> <!-- If you need location updates -->
+    <string>fetch</string>
+    <string>remote-notification</string>
     </array>
+    <key>FirebaseAppDelegateProxyEnabled</key>
+    <false/>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>This app needs location access to notify you of updates.</string>
 </dict>
 </plist>

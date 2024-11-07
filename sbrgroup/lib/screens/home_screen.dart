@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:ajna/screens/facility_management/schedule_with_report.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:install_plugin/install_plugin.dart';
@@ -254,12 +254,48 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isDownloading = false; // Add downloading state
   double _downloadProgress = 0.0; // Add download progress
 
+  late FirebaseMessaging _messaging;
+  String? _deviceToken;
   @override
   void initState() {
     super.initState();
 
     _initializeData();
     _checkForUpdate();
+    _initializeFirebaseMessaging();
+  }
+
+  void _initializeFirebaseMessaging() async {
+    _messaging = FirebaseMessaging.instance;
+
+    // Request permission for iOS
+    NotificationSettings settings = await _messaging.requestPermission();
+    print('User granted permission: ${settings.authorizationStatus}');
+
+    // Get the device token for FCM
+    _messaging.getToken().then((token) {
+      setState(() {
+        _deviceToken = token;
+      });
+      print("Device Token: $_deviceToken");
+    });
+
+    // Handle foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print("Received message: ${message.notification?.title}");
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(message.notification?.title ?? 'No Title'),
+          content: Text(message.notification?.body ?? 'No Body'),
+        ),
+      );
+    });
+
+    // Handle messages that open the app
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print("Message opened: ${message.notification?.title}");
+    });
   }
 
   Future<void> _checkForUpdate() async {
@@ -384,7 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (iconLabels != null) {
       for (var predefinedIcon in predefinedIcons) {
-        if (staticLabels.contains(predefinedIcon['label'])) {
+        if (iconLabels.contains(predefinedIcon['label'])) {
           matchedIcons.add(predefinedIcon);
           print(matchedIcons);
         }
@@ -549,7 +585,7 @@ class _HomeScreenState extends State<HomeScreen> {
           text: TextSpan(
             children: [
               const TextSpan(
-                text: 'Powered by ',
+                text: 'Powered by  ',
                 style: TextStyle(
                   color: Color.fromARGB(255, 230, 227, 227),
                   fontSize: 12,

@@ -117,12 +117,12 @@ class AttendanceRecord {
       attendanceOutDate: json['attendanceOutDate'] != null
           ? DateTime.parse(json['attendanceOutDate'])
           : null,
-      attendanceInTime: json['attendanceInTime'],
-      attendanceOutTime: json['attendanceOutTime'],
+      attendanceInTime: json['attendanceInTime'] ?? " ",
+      attendanceOutTime: json['attendanceOutTime'] ?? " ",
       logInLocationId: json['logInLocationId'],
       logOutLocationId: json['logOutLocationId'],
-      logInLocationName: json['logInLocationName'],
-      logOutLocationName: json['logOutLocationName'],
+      logInLocationName: json['logInLocationName'] ?? " ",
+      logOutLocationName: json['logOutLocationName'] ?? " ",
       attendanceStatus: json['attendanceStatus'],
       shiftId: json['shiftId'],
       commonRefKey: json['commonRefKey'],
@@ -312,6 +312,12 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     }
   }
 
+  Future<void> refreshData() async {
+    await fetchAttendanceDashboard();
+    // attendaceReportDetails = [];
+    fetchAttendanceDetails('', '');
+  }
+
   Future<void> fetchAttendanceDetails(
       String attendanceStatus, String? userName) async {
     if (userId == null) return;
@@ -422,494 +428,512 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Stack(
-        children: [
-          if (isLoading)
-            const Center(child: CircularProgressIndicator())
-          else
-            SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 30, 10, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12.0, vertical: 8.0),
-                      child: Row(
-                        children: [
-                          // Location Dropdown
-                          Expanded(
-                            child: DropdownButtonFormField2<String>(
-                              decoration: InputDecoration(
-                                labelText: 'Location',
-                                labelStyle: TextStyle(
-                                  color: Colors.grey[700],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.location_on,
-                                  color: Color.fromARGB(255, 23, 158, 142),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 12.0,
-                                  horizontal: 12.0,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color.fromARGB(255, 41, 221, 200),
-                                    width: 1.0,
+      body: RefreshIndicator(
+        onRefresh: refreshData,
+        child: Stack(
+          children: [
+            if (isLoading)
+              const Center(child: CircularProgressIndicator())
+            else
+              SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 30, 10, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12.0, vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Location Dropdown
+                            Expanded(
+                              child: DropdownButtonFormField2<String>(
+                                decoration: InputDecoration(
+                                  labelText: 'Location',
+                                  labelStyle: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
+                                  prefixIcon: Icon(
+                                    Icons.location_on,
                                     color: Color.fromARGB(255, 23, 158, 142),
-                                    width: 2.0,
                                   ),
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                              ),
-                              alignment: AlignmentDirectional.bottomStart,
-                              value: selectedLocation != '0'
-                                  ? selectedLocation
-                                  : null,
-                              items: [
-                                DropdownMenuItem<String>(
-                                  value: '0',
-                                  child: Text(
-                                    'All',
-                                    style: TextStyle(color: Colors.black87),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 12.0,
+                                    horizontal: 12.0,
                                   ),
-                                ),
-                                ...locations.map((location) {
-                                  return DropdownMenuItem<String>(
-                                    value: location.id.toString(),
-                                    child: Text(
-                                      location.location,
-                                      style: TextStyle(color: Colors.black87),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Color.fromARGB(255, 41, 221, 200),
+                                      width: 1.0,
                                     ),
-                                  );
-                                }).toList(),
-                              ],
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedLocation = value!;
-                                });
-                                fetchAttendanceDashboard();
-                              },
-                              isExpanded: true,
-                              dropdownStyleData: DropdownStyleData(
-                                maxHeight: 250,
-                                width: MediaQuery.of(context).size.width / 2 -
-                                    20, // Adjust width here
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12.0),
-                                  color: Colors.white,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 8,
-                                      offset: Offset(0, 4),
+                                    borderRadius: BorderRadius.circular(12.0),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Color.fromARGB(255, 23, 158, 142),
+                                      width: 2.0,
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // Shift Timing Dropdown
-                          Expanded(
-                            child: DropdownButtonFormField2<String>(
-                              decoration: InputDecoration(
-                                labelText: 'Shift',
-                                labelStyle: TextStyle(
-                                  color: Colors.grey[700],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.access_time,
-                                  color: Color.fromARGB(255, 23, 158, 142),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 12.0,
-                                  horizontal: 12.0,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color.fromARGB(255, 41, 221, 200),
-                                    width: 1.0,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color.fromARGB(255, 23, 158, 142),
-                                    width: 2.0,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                              ),
-                              alignment: AlignmentDirectional.bottomStart,
-                              value:
-                                  selectedShift != '0' ? selectedShift : null,
-                              items: [
-                                const DropdownMenuItem<String>(
-                                  value: '0',
-                                  child: Text(
-                                    'All',
-                                    style: TextStyle(color: Colors.black87),
+                                    borderRadius: BorderRadius.circular(12.0),
                                   ),
                                 ),
-                                ...shifts.map((shift) {
-                                  return DropdownMenuItem<String>(
-                                    value: shift.id.toString(),
-                                    child: Text(
-                                      '${shift.commonRefKey} - ${shift.commonRefValue}',
-                                      style: TextStyle(color: Colors.black87),
-                                    ),
-                                  );
-                                }).toList(),
-                              ],
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedShift = value!;
-                                });
-                                fetchAttendanceDashboard();
-                              },
-                              isExpanded: true,
-                              dropdownStyleData: DropdownStyleData(
-                                maxHeight: 250,
-                                width: MediaQuery.of(context).size.width / 2 -
-                                    20, // Adjust width here
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12.0),
-                                  color: Colors.white,
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 8,
-                                      offset: Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    CustomDateRangePicker(
-                      onDateRangeSelected: _onDateRangeSelected,
-                      selectedDateRange: selectedDateRange,
-                    ),
-                    const SizedBox(height: 15),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  selectedStatus = 'Logged In';
-                                });
-                                fetchAttendanceDetails(selectedStatus, '');
-                              },
-                              child: Card(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 2,
-                                color: Colors.green.shade50,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 10, horizontal: 8),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.login,
-                                          color: Colors.green.shade600,
-                                          size: 24),
-                                      const SizedBox(height: 6),
-                                      const Text(
-                                        'Logged In',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
+                                alignment: AlignmentDirectional.bottomStart,
+                                value: selectedLocation != '0'
+                                    ? selectedLocation
+                                    : null,
+                                items: [
+                                  DropdownMenuItem<String>(
+                                    value: '0',
+                                    child: Text('All',
+                                        style:
+                                            TextStyle(color: Colors.black87)),
+                                  ),
+                                  ...locations.map((location) {
+                                    return DropdownMenuItem<String>(
+                                      value: location.id.toString(),
+                                      child: Text(
+                                        location.location,
+                                        style: TextStyle(color: Colors.black87),
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Logged In', orElse: () => Attendance(count: 0, attendanceStatus: 'Logged In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green,
-                                        ),
+                                    );
+                                  }).toList(),
+                                ],
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedLocation = value!;
+                                  });
+                                  fetchAttendanceDashboard();
+                                },
+                                isExpanded: true,
+                                dropdownStyleData: DropdownStyleData(
+                                  maxHeight: 250,
+                                  width: MediaQuery.of(context).size.width / 2 -
+                                      20,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    color: Colors.white,
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 8,
+                                        offset: Offset(0, 4),
                                       ),
                                     ],
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  selectedStatus = 'Not Logged In';
-                                });
-                                fetchAttendanceDetails(selectedStatus, '');
-                              },
-                              child: Card(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                            const SizedBox(width: 16),
+
+                            // Shift Timing Dropdown
+                            Expanded(
+                              child: DropdownButtonFormField2<String>(
+                                decoration: InputDecoration(
+                                  labelText: 'Shift',
+                                  labelStyle: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.access_time,
+                                    color: Color.fromARGB(255, 23, 158, 142),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 12.0,
+                                    horizontal: 12.0,
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Color.fromARGB(255, 41, 221, 200),
+                                      width: 1.0,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12.0),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Color.fromARGB(255, 23, 158, 142),
+                                      width: 2.0,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12.0),
+                                  ),
                                 ),
-                                elevation: 2,
-                                color: Colors.red.shade50,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 10, horizontal: 8),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.block,
-                                          color: Colors.red.shade600, size: 24),
-                                      const SizedBox(height: 6),
-                                      const Text(
-                                        'Not Logged In',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
+                                alignment: AlignmentDirectional.bottomStart,
+                                value:
+                                    selectedShift != '0' ? selectedShift : null,
+                                items: [
+                                  DropdownMenuItem<String>(
+                                    value: '0',
+                                    child: Text('All',
+                                        style:
+                                            TextStyle(color: Colors.black87)),
+                                  ),
+                                  ...shifts.map((shift) {
+                                    return DropdownMenuItem<String>(
+                                      value: shift.id.toString(),
+                                      child: Text(
+                                        '${shift.commonRefKey} - ${shift.commonRefValue}',
+                                        style: TextStyle(color: Colors.black87),
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Not Logged In', orElse: () => Attendance(count: 0, attendanceStatus: 'Not Logged In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.red,
-                                        ),
+                                    );
+                                  }).toList(),
+                                ],
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedShift = value!;
+                                  });
+                                  fetchAttendanceDashboard();
+                                },
+                                isExpanded: true,
+                                dropdownStyleData: DropdownStyleData(
+                                  maxHeight: 250,
+                                  width: MediaQuery.of(context).size.width / 2 -
+                                      20,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    color: Colors.white,
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 8,
+                                        offset: Offset(0, 4),
                                       ),
                                     ],
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-
-                    const SizedBox(height: 15),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16.0, vertical: 8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              decoration: InputDecoration(
-                                hintText: 'Search by name...',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey),
-                                ),
-                                contentPadding: EdgeInsets.symmetric(
-                                    vertical: 10, horizontal: 10),
-                              ),
-                              onChanged: (value) {
-                                setState(() {
-                                  searchQuery = value;
-                                });
-                                if (searchQuery.length >= 3 ||
-                                    searchQuery.length == 0) {
-                                  fetchAttendanceDetails(
-                                    selectedStatus,
-                                    searchQuery,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-
-                          const SizedBox(
-                              width:
-                                  8.0), // Space between the TextField and Button
-                          ElevatedButton(
-                            onPressed: () {
-                              fetchAttendanceDetails('', '');
-                            },
-                            child: Text('All Attendance'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 20),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 15),
+                      CustomDateRangePicker(
+                        onDateRangeSelected: _onDateRangeSelected,
+                        selectedDateRange: selectedDateRange,
                       ),
-                    ),
-                    const SizedBox(
-                        height:
-                            16.0), // Space between the search row and the list
-                    // Flexible ListView to adapt to available space
-                    Container(
-                      height: screenHeight - 400, // Adjust height as needed
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        itemCount: attendaceReportDetails.length,
-                        itemBuilder: (context, index) {
-                          final record = attendaceReportDetails[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                                vertical: 8.0, horizontal: 16.0),
-                            elevation: 4,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          record.userName,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
+                      const SizedBox(height: 15),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedStatus = 'Logged In';
+                                  });
+                                  fetchAttendanceDetails(selectedStatus, '');
+                                },
+                                child: Card(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 3,
+                                  color: Colors.green.shade50,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                        horizontal: 10), // Adjusted padding
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.login,
+                                            color: Colors.green.shade600,
+                                            size: 24), // Reduced icon size
+                                        const SizedBox(
+                                            height: 4), // Reduced space
+                                        const Text(
+                                          'Logged In',
+                                          style: TextStyle(
+                                            fontSize: 14, // Reduced font size
+                                            fontWeight: FontWeight.w600,
                                             color: Colors.black87,
                                           ),
-                                          overflow: TextOverflow
-                                              .ellipsis, // Prevent overflow
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        record.attendanceStatus,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: record.attendanceStatus ==
-                                                  "Logged In"
-                                              ? Colors.green
-                                              : const Color.fromARGB(
-                                                  255, 241, 58, 58),
+                                        const SizedBox(
+                                            height: 2), // Reduced space
+                                        Text(
+                                          '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Logged In', orElse: () => Attendance(count: 0, attendanceStatus: 'Logged In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
+                                          style: const TextStyle(
+                                            fontSize: 16, // Reduced font size
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                  const SizedBox(height: 6.0),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Row(
-                                          children: [
-                                            const Icon(Icons.login,
-                                                color: Colors.blueAccent,
-                                                size: 18),
-                                            const SizedBox(width: 2),
-                                            Expanded(
-                                              child: Text(
-                                                'In: ${record.attendanceInTime} (${record.logInLocationName})',
-                                                style: TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.black54),
-                                                overflow: TextOverflow
-                                                    .ellipsis, // Prevent overflow
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.logout,
-                                                color: Colors.redAccent,
-                                                size: 18),
-                                            const SizedBox(width: 2),
-                                            Expanded(
-                                              child: Text(
-                                                'Out: ${record.attendanceOutTime} (${record.logOutLocationName})',
-                                                style: TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.black54),
-                                                overflow: TextOverflow
-                                                    .ellipsis, // Prevent overflow
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6.0),
-                                  Divider(color: Colors.grey[300]),
-                                  const SizedBox(height: 6.0),
-                                  Text(
-                                    'In Date: ${record.attendanceInDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceInDate!) : "--"}',
-                                    style: TextStyle(
-                                        fontSize: 14, color: Colors.black54),
-                                  ),
-                                  const SizedBox(height: 2.0),
-                                  Text(
-                                    'Out Date: ${record.attendanceOutDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceOutDate!) : "--"}',
-                                    style: TextStyle(
-                                        fontSize: 14, color: Colors.black54),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
-                          );
-                        },
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedStatus = 'Not Logged In';
+                                  });
+                                  fetchAttendanceDetails(selectedStatus, '');
+                                },
+                                child: Card(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 3,
+                                  color: Colors.red.shade50,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                        horizontal: 10), // Adjusted padding
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.block,
+                                            color: Colors.red.shade600,
+                                            size: 24), // Reduced icon size
+                                        const SizedBox(
+                                            height: 4), // Reduced space
+                                        const Text(
+                                          'Not Logged In',
+                                          style: TextStyle(
+                                            fontSize: 14, // Reduced font size
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                            height: 2), // Reduced space
+                                        Text(
+                                          '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Not Logged In', orElse: () => Attendance(count: 0, attendanceStatus: 'Not Logged In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
+                                          style: const TextStyle(
+                                            fontSize: 16, // Reduced font size
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+
+                      const SizedBox(height: 15),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                decoration: InputDecoration(
+                                  hintText: 'Search by name...',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade400),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide(
+                                        color: Colors.blue, width: 2),
+                                  ),
+                                  contentPadding: EdgeInsets.symmetric(
+                                      vertical: 12, horizontal: 16),
+                                ),
+                                onChanged: (value) {
+                                  setState(() {
+                                    searchQuery = value;
+                                  });
+                                  if (searchQuery.length >= 3 ||
+                                      searchQuery.isEmpty) {
+                                    fetchAttendanceDetails(
+                                        selectedStatus, searchQuery);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(
+                                width:
+                                    8.0), // Space between the TextField and Button
+                            ElevatedButton(
+                              onPressed: () {
+                                fetchAttendanceDetails('', '');
+                              },
+                              child: Text('All Attendance'),
+                              style: ElevatedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 12),
+                                backgroundColor: Colors.blue, // Text color
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(
+                          height:
+                              16.0), // Space between the search row and the list
+                      // Flexible ListView to adapt to available space
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Container(
+                          height: screenHeight - 400, // Adjust height as needed
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            itemCount: attendaceReportDetails.length +
+                                1, // Increase count for padding
+                            itemBuilder: (context, index) {
+                              if (index == attendaceReportDetails.length) {
+                                // Add extra space at the end of the list
+                                return const SizedBox(
+                                    height: 80); // Adjust height as needed
+                              }
+
+                              final record = attendaceReportDetails[index];
+                              return Card(
+                                margin: const EdgeInsets.symmetric(
+                                    vertical: 4.0, horizontal: 10.0),
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 8.0, horizontal: 10.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // User and Status Row
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              record.userName,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.black87,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            record.attendanceStatus,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: record.attendanceStatus ==
+                                                      "Logged In"
+                                                  ? Colors.green
+                                                  : const Color.fromARGB(
+                                                      255, 241, 58, 58),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      // In and Out Times Row
+                                      Row(
+                                        children: [
+                                          Icon(Icons.login,
+                                              color: Colors.blueAccent,
+                                              size: 14),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              'In: ${record.attendanceInTime} - ${record.logInLocationName}',
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.black54),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.logout,
+                                              color: Colors.redAccent,
+                                              size: 14),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              'Out: ${record.attendanceOutTime} - ${record.logOutLocationName}',
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.black54),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      // In and Out Dates Row
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'In Date: ${record.attendanceInDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceInDate!) : "--"}',
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.black54),
+                                          ),
+                                          Text(
+                                            'Out Date: ${record.attendanceOutDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceOutDate!) : "--"}',
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.black54),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        padding: EdgeInsets.zero,
-        color: const Color.fromRGBO(6, 73, 105, 1),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            IconButton(
-              icon: const Icon(Icons.home, size: 16),
-              color: Colors.white,
-              onPressed: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-              ),
-            ),
           ],
         ),
       ),
