@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/custom_date_picker.dart';
-import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:multi_select_flutter/dialog/multi_select_dialog_field.dart';
+import 'package:multi_select_flutter/util/multi_select_item.dart';
 
 class Attendance {
   final int count;
@@ -132,6 +134,49 @@ class AttendanceRecord {
   }
 }
 
+class RoleReport {
+  final int roleId;
+  final String roleName;
+  final int totalAttendance;
+  final int loggedInCount;
+  final int notLoggedInCount;
+
+  RoleReport({
+    required this.roleId,
+    required this.roleName,
+    required this.totalAttendance,
+    required this.loggedInCount,
+    required this.notLoggedInCount,
+  });
+
+  factory RoleReport.fromJson(Map<String, dynamic> json) {
+    return RoleReport(
+      roleId: json['roleId'] ?? 0,
+      roleName: json['roleName'] ?? 'Unknown',
+      totalAttendance: json['totalAttendance'] ?? 0,
+      loggedInCount: json['loggedInCount'] ?? 0,
+      notLoggedInCount: json['notLoggedInCount'] ?? 0,
+    );
+  }
+}
+
+class Role {
+  final int roleId;
+  final String roleName;
+
+  Role({
+    required this.roleId,
+    required this.roleName,
+  });
+
+  factory Role.fromJson(Map<String, dynamic> json) {
+    return Role(
+      roleId: json['roleId'] ?? 0,
+      roleName: json['roleName'] ?? 'Unknown',
+    );
+  }
+}
+
 class AttendanceReportScreen extends StatefulWidget {
   @override
   _AttendanceReportScreenState createState() => _AttendanceReportScreenState();
@@ -141,6 +186,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   bool isLoading = true;
   List<Attendance> attendanceRecords = [];
   List<AttendanceRecord> attendaceReportDetails = [];
+  List<RoleReport> roleReportDetails = [];
   String selectedDateRange = '0';
   int? organizationId;
   int? userId;
@@ -148,6 +194,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   List<ShiftTiming> shifts = [];
   String selectedLocation = '0';
   String selectedShift = '0';
+  String selectedRole = '0';
+  List<Role> roles = [];
+
   String attendanceStatus = '';
   String searchQuery = '';
   String selectedStatus = '';
@@ -155,6 +204,12 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   int size = 10;
   final ScrollController _scrollController = ScrollController();
   late int _itemCount;
+  List<ShiftTiming> selectedShifts = [];
+  List<int> selectedShiftIds = [0]; // Initialize with 0 for "All Shifts"
+
+  bool isNotificationSent = false;
+
+  bool showAttendanceList = true;
 
   @override
   void initState() {
@@ -176,6 +231,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
       fetchAttendanceDashboard();
       fetchShiftData();
       fetchAttendanceLocation(organizationId!);
+      fetchRoleReport(); // API call for Role Report
+      fetchRoles();
     } catch (error) {
       ErrorHandler.handleError(
         context,
@@ -215,29 +272,65 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     }
   }
 
+  // Future<void> fetchShiftData() async {
+  //   try {
+  //     final response = await ApiService.fetchshiftData();
+  //     if (response.statusCode == 200) {
+  //       final jsonData = jsonDecode(response.body);
+  //       setState(() {
+  //         shifts = jsonData
+  //             .map<ShiftTiming>((json) => ShiftTiming.fromJson(json))
+  //             .toList();
+  //       });
+  //     } else {
+  //       throw Exception('Failed to load shifts');
+  //     }
+  //   } catch (error) {
+  //     ErrorHandler.handleError(
+  //       context,
+  //       'Failed to load shift data.',
+  //       'Shift data error: $error',
+  //     );
+  //   }
+  // }
+
   Future<void> fetchShiftData() async {
     try {
       final response = await ApiService.fetchshiftData();
       if (response.statusCode == 200) {
-        final jsonData = jsonDecode(response.body);
+        final List<dynamic> jsonData = jsonDecode(response.body);
+
         setState(() {
-          shifts = jsonData
-              .map<ShiftTiming>((json) => ShiftTiming.fromJson(json))
-              .toList();
+          shifts = jsonData.map((json) => ShiftTiming.fromJson(json)).toList();
+
+          // Add "All Shifts" option if it doesn't exist
+          ShiftTiming allShift = ShiftTiming(
+              id: 0, commonRefKey: 'All Shifts', commonRefValue: 'All');
+
+          if (!shifts.any((shift) => shift.id == 0)) {
+            shifts.insert(0, allShift);
+          }
+
+          // Set default selected shift as "All Shifts"
+          selectedShifts = [allShift];
+          selectedShiftIds = selectedShifts
+              .map((shift) => shift.id)
+              .toList(); // Update selected IDs
         });
       } else {
         throw Exception('Failed to load shifts');
       }
     } catch (error) {
-      ErrorHandler.handleError(
-        context,
-        'Failed to load shift data.',
-        'Shift data error: $error',
+      print("Error loading shift data: $error");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load shift data.')),
       );
     }
   }
 
   Future<void> fetchAttendanceLocation(int organizationId) async {
+    fetchRoles();
+
     try {
       final response = await ApiService.fetchAttendanceLocation(organizationId);
       if (response.statusCode == 200) {
@@ -259,20 +352,47 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     }
   }
 
+  Future<void> fetchRoles() async {
+    try {
+      final response = await ApiService.fetchRoles(
+        organizationId!,
+        selectedLocation,
+      );
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        setState(() {
+          roles = jsonData.map<Role>((json) => Role.fromJson(json)).toList();
+        });
+      } else {
+        throw Exception('Failed to load roles');
+      }
+    } catch (error) {
+      ErrorHandler.handleError(
+        context,
+        'Failed to load roles data.',
+        'Location data error: $error',
+      );
+    }
+  }
+
   Future<void> fetchAttendanceDashboard() async {
     if (organizationId == null || userId == null) return;
 
     // Reset attendance details before fetching new dashboard data
     setState(() {
       attendaceReportDetails = [];
+      fetchRoleReport(); // API call for Role Report
     });
 
     try {
+      String shiftIds = selectedShiftIds.join(',');
       var response = await ApiService.fetchAttendanceReport(
         userId!,
         organizationId!,
         selectedLocation,
-        selectedShift,
+        // selectedShift,
+        shiftIds,
+        selectedRole,
         selectedDateRange,
       );
 
@@ -289,12 +409,31 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             attendanceRecords =
                 jsonData.map((json) => Attendance.fromJson(json)).toList();
           });
+
+          // Reset notification flag after success
+          isNotificationSent = false; // Reset notification flag after success
         } catch (parsingError) {
           ErrorHandler.handleError(
             context,
             'Error parsing attendance data. Please check the data format.',
             'Parsing error: $parsingError, Response: ${response.body}',
           );
+
+          // Send notification only if connected to Wi-Fi and no notification sent before
+          // if (!isNotificationSent) {
+          //   var connectivityResult = await Connectivity().checkConnectivity();
+          //   if (connectivityResult == ConnectivityResult.wifi) {
+          //     await ApiService.sendNotification(
+          //       [
+          //         userId!
+          //       ], // Send the current userId or other relevant userId list
+          //       'Attendance Data Error',
+          //       'There was an error fetching attendance data: $parsingError',
+          //     );
+          //     // Set the flag to true to prevent further notifications
+          //     isNotificationSent = true;
+          //   }
+          // }
         }
       } else {
         ErrorHandler.handleError(
@@ -302,6 +441,22 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           'Failed to fetch attendance data. Status code: ${response.statusCode}',
           'Response body: ${response.body}',
         );
+
+        // Send notification only if connected to Wi-Fi and no notification sent before
+        // if (!isNotificationSent) {
+        //   var connectivityResult = await Connectivity().checkConnectivity();
+        //   if (connectivityResult == ConnectivityResult.wifi) {
+        //     await ApiService.sendNotification(
+        //       [
+        //         userId!
+        //       ], // Send the current userId or other relevant userId list
+        //       'Attendance Data Error',
+        //       'Failed to fetch attendance data. Status code: ${response.statusCode}',
+        //     );
+        //     // Set the flag to true to prevent further notifications
+        //     isNotificationSent = true;
+        //   }
+        // }
       }
     } catch (error) {
       ErrorHandler.handleError(
@@ -309,6 +464,19 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         'Failed to fetch attendance data. Please try again later.',
         'General error: $error',
       );
+      // Send notification only if connected to Wi-Fi and no notification sent before
+      // if (!isNotificationSent) {
+      //   var connectivityResult = await Connectivity().checkConnectivity();
+      //   if (connectivityResult == ConnectivityResult.wifi) {
+      //     await ApiService.sendNotification(
+      //       [userId!], // Send the current userId or other relevant userId list
+      //       'Attendance Data Error',
+      //       'Error occurred while fetching attendance data: $error',
+      //     );
+      //     // Set the flag to true to prevent further notifications
+      //     isNotificationSent = true;
+      //   }
+      // }
     }
   }
 
@@ -316,6 +484,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     await fetchAttendanceDashboard();
     // attendaceReportDetails = [];
     fetchAttendanceDetails('', '');
+    fetchRoleReport(); // API call for Role Report
   }
 
   Future<void> fetchAttendanceDetails(
@@ -323,12 +492,15 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     if (userId == null) return;
 
     try {
+      String shiftIds = selectedShiftIds.join(',');
       var response = await ApiService.fetchAttendanceDetails(
         userId!,
         userName ?? '',
         attendanceStatus,
         selectedLocation,
-        selectedShift,
+        // selectedShift,
+        shiftIds,
+        selectedRole,
         selectedDateRange,
         page,
         size,
@@ -392,11 +564,74 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     } finally {}
   }
 
+  Future<void> fetchRoleReport() async {
+    if (userId == null) return;
+
+    try {
+      String shiftIds = selectedShiftIds.join(',');
+      var response = await ApiService.fetchRoleReport(
+        userId!,
+        organizationId!,
+        selectedLocation,
+        shiftIds,
+        selectedRole,
+        selectedDateRange,
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          // Attempt to decode the JSON response
+          List<dynamic> jsonData =
+              jsonDecode(response.body); // Parse the response body as a List
+          print('Decoded JSON data: $jsonData'); // Logs decoded data structure
+
+          setState(() {
+            // Map the JSON response to a list of RoleReport objects
+            List<RoleReport> roleReports = jsonData
+                .map<RoleReport?>((record) {
+                  try {
+                    return RoleReport.fromJson(record);
+                  } catch (e) {
+                    print('Error parsing record: $record\nError: $e');
+                    return null; // Return null if parsing fails
+                  }
+                })
+                .where((record) => record != null) // Filter out nulls
+                .cast<RoleReport>() // Cast to List<RoleReport>
+                .toList();
+
+            // Store the fetched role reports
+            roleReportDetails = roleReports;
+          });
+        } catch (parsingError) {
+          print('Parsing error: $parsingError');
+          ErrorHandler.handleError(
+            context,
+            'Error parsing role reports. Please check the data format.',
+            'Parsing error: $parsingError, Response: ${response.body}',
+          );
+        }
+      } else {
+        ErrorHandler.handleError(
+          context,
+          'Failed to fetch role reports. Status code: ${response.statusCode}',
+          'Response body: ${response.body}',
+        );
+      }
+    } catch (error) {
+      ErrorHandler.handleError(
+        context,
+        'Failed to fetch role reports. Please try again later.',
+        'General error: $error',
+      );
+    } finally {}
+  }
+
   void _onDateRangeSelected(
       DateTime startDate, DateTime endDate, String range) {
     setState(() {
       selectedDateRange = range;
-      isLoading = true;
+      // isLoading = true;
     });
 
     fetchAttendanceDashboard().catchError((error) {
@@ -441,190 +676,397 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12.0, vertical: 8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            // Location Dropdown
-                            Expanded(
-                              child: DropdownButtonFormField2<String>(
-                                decoration: InputDecoration(
-                                  labelText: 'Location',
-                                  labelStyle: TextStyle(
-                                    color: Colors.grey[700],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.location_on,
-                                    color: Color.fromARGB(255, 23, 158, 142),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 12.0,
-                                    horizontal: 12.0,
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade300),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Color.fromARGB(255, 41, 221, 200),
-                                      width: 1.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Color.fromARGB(255, 23, 158, 142),
-                                      width: 2.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                ),
-                                alignment: AlignmentDirectional.bottomStart,
-                                value: selectedLocation != '0'
-                                    ? selectedLocation
-                                    : null,
-                                items: [
-                                  DropdownMenuItem<String>(
-                                    value: '0',
-                                    child: Text('All',
-                                        style:
-                                            TextStyle(color: Colors.black87)),
-                                  ),
-                                  ...locations.map((location) {
-                                    return DropdownMenuItem<String>(
-                                      value: location.id.toString(),
-                                      child: Text(
-                                        location.location,
-                                        style: TextStyle(color: Colors.black87),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ],
-                                onChanged: (value) {
-                                  setState(() {
-                                    selectedLocation = value!;
-                                  });
-                                  fetchAttendanceDashboard();
-                                },
-                                isExpanded: true,
-                                dropdownStyleData: DropdownStyleData(
-                                  maxHeight: 250,
-                                  width: MediaQuery.of(context).size.width / 2 -
-                                      20,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    color: Colors.white,
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Colors.black12,
-                                        blurRadius: 8,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white, // Optional background color
+                          borderRadius: BorderRadius.circular(0),
+                          border: Border.all(
+                            color: Color.fromARGB(255, 204, 208,
+                                209), // Replace with your desired color
+                            width: 1.0, // Border thickness
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color.fromARGB(255, 225, 223, 223)
+                                  .withOpacity(0.1),
+                              spreadRadius: 2,
+                              blurRadius: 8,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ExpansionTile(
+                          title: const Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              // Icon(
+                              //   Icons.filter_alt, // Use any filter icon you prefer
+                              //   size: 20,
+                              //   color: Colors.grey, // Adjust color to your preference
+                              // ),
+                              Text(
+                                "Filters",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
+                            ],
+                          ),
+                          //leading: Icon(Icons.info), // Custom leading icon
+                          trailing: Icon(
+                            Icons.filter_alt,
+                            size: 24,
+                            color: Colors.grey,
+                          ),
+                          children: [
+                            const SizedBox(height: 10),
+                            CustomDateRangePicker(
+                              onDateRangeSelected: _onDateRangeSelected,
+                              selectedDateRange: selectedDateRange,
                             ),
-                            const SizedBox(width: 16),
-
-                            // Shift Timing Dropdown
-                            Expanded(
-                              child: DropdownButtonFormField2<String>(
-                                decoration: InputDecoration(
-                                  labelText: 'Shift',
-                                  labelStyle: TextStyle(
-                                    color: Colors.grey[700],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.access_time,
-                                    color: Color.fromARGB(255, 23, 158, 142),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 12.0,
-                                    horizontal: 12.0,
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade300),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Color.fromARGB(255, 41, 221, 200),
-                                      width: 1.0,
+                            const SizedBox(height: 15),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                // Location Dropdown
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal:
+                                            12.0), // Adjust the horizontal padding as needed
+                                    child: DropdownButtonFormField2<String>(
+                                      decoration: InputDecoration(
+                                        labelText: 'Location',
+                                        labelStyle: TextStyle(
+                                          color: Colors.grey[700],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.location_on,
+                                          color:
+                                              Color.fromARGB(255, 23, 158, 142),
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          vertical: 12.0,
+                                          horizontal: 12.0,
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12.0),
+                                          borderSide: BorderSide(
+                                              color: Colors.grey.shade300),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Color.fromARGB(
+                                                255, 41, 221, 200),
+                                            width: 1.0,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(12.0),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Color.fromARGB(
+                                                255, 23, 158, 142),
+                                            width: 2.0,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(12.0),
+                                        ),
+                                      ),
+                                      alignment:
+                                          AlignmentDirectional.bottomStart,
+                                      value: selectedLocation != '0'
+                                          ? selectedLocation
+                                          : '0',
+                                      items: [
+                                        DropdownMenuItem<String>(
+                                          value: '0',
+                                          child: Text('All',
+                                              style: TextStyle(
+                                                  color: Colors.black87)),
+                                        ),
+                                        ...locations.map((location) {
+                                          return DropdownMenuItem<String>(
+                                            value: location.id.toString(),
+                                            child: Text(
+                                              location.location,
+                                              style: TextStyle(
+                                                  color: Colors.black87),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() {
+                                          selectedLocation = value!;
+                                        });
+                                        fetchAttendanceDashboard();
+                                        fetchRoleReport();
+                                      },
+                                      isExpanded: true,
+                                      dropdownStyleData: DropdownStyleData(
+                                        maxHeight: 250,
+                                        width:
+                                            MediaQuery.of(context).size.width *
+                                                0.9,
+                                        decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(12.0),
+                                          color: Colors.white,
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Colors.black12,
+                                              blurRadius: 8,
+                                              offset: Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Color.fromARGB(255, 23, 158, 142),
-                                      width: 2.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.0),
                                   ),
                                 ),
-                                alignment: AlignmentDirectional.bottomStart,
-                                value:
-                                    selectedShift != '0' ? selectedShift : null,
-                                items: [
-                                  DropdownMenuItem<String>(
-                                    value: '0',
-                                    child: Text('All',
-                                        style:
-                                            TextStyle(color: Colors.black87)),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            // Row(
+                            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            //   children: [
+                            //     // Location Dropdown
+                            //     Expanded(
+                            //       child: Padding(
+                            //         padding: const EdgeInsets.symmetric(
+                            //             horizontal:
+                            //                 12.0), // Adjust the horizontal padding as needed
+                            //         child: DropdownButtonFormField2<String>(
+                            //           decoration: InputDecoration(
+                            //             labelText: 'Role',
+                            //             labelStyle: TextStyle(
+                            //               color: Colors.grey[700],
+                            //               fontWeight: FontWeight.w500,
+                            //             ),
+                            //             prefixIcon: Icon(
+                            //               Icons.supervised_user_circle,
+                            //               color:
+                            //                   Color.fromARGB(255, 23, 158, 142),
+                            //             ),
+                            //             contentPadding:
+                            //                 const EdgeInsets.symmetric(
+                            //               vertical: 12.0,
+                            //               horizontal: 12.0,
+                            //             ),
+                            //             filled: true,
+                            //             fillColor: Colors.white,
+                            //             border: OutlineInputBorder(
+                            //               borderRadius:
+                            //                   BorderRadius.circular(12.0),
+                            //               borderSide: BorderSide(
+                            //                   color: Colors.grey.shade300),
+                            //             ),
+                            //             enabledBorder: OutlineInputBorder(
+                            //               borderSide: BorderSide(
+                            //                 color: Color.fromARGB(
+                            //                     255, 41, 221, 200),
+                            //                 width: 1.0,
+                            //               ),
+                            //               borderRadius:
+                            //                   BorderRadius.circular(12.0),
+                            //             ),
+                            //             focusedBorder: OutlineInputBorder(
+                            //               borderSide: BorderSide(
+                            //                 color: Color.fromARGB(
+                            //                     255, 23, 158, 142),
+                            //                 width: 2.0,
+                            //               ),
+                            //               borderRadius:
+                            //                   BorderRadius.circular(12.0),
+                            //             ),
+                            //           ),
+                            //           alignment:
+                            //               AlignmentDirectional.bottomStart,
+                            //           value: selectedRole != '0'
+                            //               ? selectedRole
+                            //               : '0',
+                            //           items: [
+                            //             DropdownMenuItem<String>(
+                            //               value: '0',
+                            //               child: Text('All',
+                            //                   style: TextStyle(
+                            //                       color: Colors.black87)),
+                            //             ),
+                            //             ...roles.map((roles) {
+                            //               return DropdownMenuItem<String>(
+                            //                 value: roles.roleId.toString(),
+                            //                 child: Text(
+                            //                   roles.roleName,
+                            //                   style: TextStyle(
+                            //                       color: Colors.black87),
+                            //                 ),
+                            //               );
+                            //             }).toList(),
+                            //           ],
+                            //           onChanged: (value) {
+                            //             setState(() {
+                            //               selectedRole = value!;
+                            //             });
+                            //             // fetchAttendanceDashboard();
+                            //             // fetchRoleReport();
+                            //             fetchAttendanceDetails('', '');
+                            //           },
+                            //           isExpanded: true,
+                            //           dropdownStyleData: DropdownStyleData(
+                            //             maxHeight: 250,
+                            //             width:
+                            //                 MediaQuery.of(context).size.width *
+                            //                     0.9,
+                            //             decoration: BoxDecoration(
+                            //               borderRadius:
+                            //                   BorderRadius.circular(12.0),
+                            //               color: Colors.white,
+                            //               boxShadow: const [
+                            //                 BoxShadow(
+                            //                   color: Colors.black12,
+                            //                   blurRadius: 8,
+                            //                   offset: Offset(0, 4),
+                            //                 ),
+                            //               ],
+                            //             ),
+                            //           ),
+                            //         ),
+                            //       ),
+                            //     ),
+                            //   ],
+                            // ),
+                            // const SizedBox(height: 25),
+                            Container(
+                              margin: const EdgeInsets.symmetric(vertical: 5),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.teal.shade100),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black12.withOpacity(0.05),
+                                    spreadRadius: 2,
+                                    blurRadius: 8,
+                                    offset: Offset(0, 3),
                                   ),
-                                  ...shifts.map((shift) {
-                                    return DropdownMenuItem<String>(
-                                      value: shift.id.toString(),
-                                      child: Text(
-                                        '${shift.commonRefKey} - ${shift.commonRefValue}',
-                                        style: TextStyle(color: Colors.black87),
-                                      ),
-                                    );
-                                  }).toList(),
                                 ],
-                                onChanged: (value) {
-                                  setState(() {
-                                    selectedShift = value!;
-                                  });
-                                  fetchAttendanceDashboard();
-                                },
-                                isExpanded: true,
-                                dropdownStyleData: DropdownStyleData(
-                                  maxHeight: 250,
-                                  width: MediaQuery.of(context).size.width / 2 -
-                                      20,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    color: Colors.white,
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Colors.black12,
-                                        blurRadius: 8,
-                                        offset: Offset(0, 4),
+                              ),
+                              child: Column(
+                                children: [
+                                  // Buttons to select all "Morning" or "Night" shifts based on partial key match
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            // Select all shifts that contain "Morning" in their commonRefKey
+                                            selectedShifts = shifts
+                                                .where((shift) => shift
+                                                    .commonRefKey
+                                                    .contains('Morning'))
+                                                .toList();
+                                            selectedShiftIds = selectedShifts
+                                                .map((shift) => shift.id)
+                                                .toList();
+                                          });
+                                          fetchAttendanceDashboard();
+                                        },
+                                        child: Text(
+                                          "Morning Shifts",
+                                          style: TextStyle(
+                                              color: Colors.teal.shade600),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            // Select all shifts that contain "Night" in their commonRefKey
+                                            selectedShifts = shifts
+                                                .where((shift) => shift
+                                                    .commonRefKey
+                                                    .contains('Night'))
+                                                .toList();
+                                            selectedShiftIds = selectedShifts
+                                                .map((shift) => shift.id)
+                                                .toList();
+                                          });
+                                          fetchAttendanceDashboard();
+                                        },
+                                        child: Text(
+                                          "Night Shifts",
+                                          style: TextStyle(
+                                              color: Colors.teal.shade600),
+                                        ),
                                       ),
                                     ],
                                   ),
-                                ),
+                                  MultiSelectDialogField<ShiftTiming>(
+                                    items: shifts
+                                        .map((shift) =>
+                                            MultiSelectItem<ShiftTiming>(
+                                              shift,
+                                              '${shift.commonRefKey} - ${shift.commonRefValue}',
+                                            ))
+                                        .toList(),
+                                    initialValue: selectedShifts,
+                                    title: const Text(
+                                      "Select Shifts",
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                    selectedColor: Colors.teal,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      color: Colors.white,
+                                      border: Border.all(
+                                          color: Colors.teal.shade100),
+                                    ),
+                                    buttonIcon: const Icon(
+                                      Icons.access_time,
+                                      color: Colors.teal,
+                                    ),
+                                    buttonText: Text(
+                                      "Select Shifts",
+                                      style: TextStyle(
+                                        color: Colors.teal.shade600,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    dialogWidth:
+                                        MediaQuery.of(context).size.width *
+                                            0.75,
+                                    itemsTextStyle:
+                                        const TextStyle(fontSize: 12),
+                                    checkColor: Colors.teal,
+                                    dialogHeight:
+                                        MediaQuery.of(context).size.height *
+                                            0.5,
+                                    onConfirm: (values) {
+                                      setState(() {
+                                        selectedShifts = values;
+                                        selectedShiftIds = values
+                                            .map((shift) => shift.id)
+                                            .toList();
+                                      });
+                                      fetchAttendanceDashboard();
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 15),
-                      CustomDateRangePicker(
-                        onDateRangeSelected: _onDateRangeSelected,
-                        selectedDateRange: selectedDateRange,
                       ),
                       const SizedBox(height: 15),
                       Padding(
@@ -742,194 +1184,384 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                       ),
 
                       const SizedBox(height: 15),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0, vertical: 8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  hintText: 'Search by name...',
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade400),
+                      Column(
+                        children: [
+                          // First Row - Buttons
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0, vertical: 8.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      showAttendanceList = true;
+                                      fetchAttendanceDetails('', '');
+                                    });
+                                  },
+                                  child: Text('All Attendance'),
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20, vertical: 12),
+                                    backgroundColor: Colors.blue, // Text color
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide(
-                                        color: Colors.blue, width: 2),
+                                ),
+                                const SizedBox(
+                                    width: 8.0), // Space between the buttons
+                                ElevatedButton(
+                                  onPressed: () {
+                                    // showRoleReportPopup(
+                                    //     context, roleReportDetails);
+
+                                    setState(() {
+                                      showAttendanceList = false;
+                                      fetchRoleReport();
+                                    });
+                                  },
+                                  child: Text('Role Report'),
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20, vertical: 12),
+                                    backgroundColor: Colors
+                                        .green, // Use a different color if needed
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
-                                  contentPadding: EdgeInsets.symmetric(
-                                      vertical: 12, horizontal: 16),
                                 ),
-                                onChanged: (value) {
-                                  setState(() {
-                                    searchQuery = value;
-                                  });
-                                  if (searchQuery.length >= 3 ||
-                                      searchQuery.isEmpty) {
-                                    fetchAttendanceDetails(
-                                        selectedStatus, searchQuery);
-                                  }
-                                },
-                              ),
+                              ],
                             ),
-                            const SizedBox(
-                                width:
-                                    8.0), // Space between the TextField and Button
-                            ElevatedButton(
-                              onPressed: () {
-                                fetchAttendanceDetails('', '');
-                              },
-                              child: Text('All Attendance'),
-                              style: ElevatedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 12),
-                                backgroundColor: Colors.blue, // Text color
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                          ),
+
+                          // Second Row - Search Input
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0, vertical: 8.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    decoration: InputDecoration(
+                                      hintText: 'Search by name...',
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey.shade400),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(
+                                            color: Colors.blue, width: 2),
+                                      ),
+                                      contentPadding: EdgeInsets.symmetric(
+                                          vertical: 12, horizontal: 16),
+                                    ),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        searchQuery = value;
+                                      });
+                                      if (searchQuery.length >= 3 ||
+                                          searchQuery.isEmpty) {
+                                        fetchAttendanceDetails(
+                                            selectedStatus, searchQuery);
+                                      }
+                                    },
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                       const SizedBox(
                           height:
                               16.0), // Space between the search row and the list
                       // Flexible ListView to adapt to available space
+
                       Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: Container(
                           height: screenHeight - 400, // Adjust height as needed
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            itemCount: attendaceReportDetails.length +
-                                1, // Increase count for padding
-                            itemBuilder: (context, index) {
-                              if (index == attendaceReportDetails.length) {
-                                // Add extra space at the end of the list
-                                return const SizedBox(
-                                    height: 80); // Adjust height as needed
-                              }
+                          child: showAttendanceList
+                              ? ListView.builder(
+                                  controller: _scrollController,
+                                  itemCount: attendaceReportDetails.length +
+                                      1, // Increase count for padding
+                                  itemBuilder: (context, index) {
+                                    if (index ==
+                                        attendaceReportDetails.length) {
+                                      // Add extra space at the end of the list
+                                      return const SizedBox(
+                                          height:
+                                              80); // Adjust height as needed
+                                    }
 
-                              final record = attendaceReportDetails[index];
-                              return Card(
-                                margin: const EdgeInsets.symmetric(
-                                    vertical: 4.0, horizontal: 10.0),
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 8.0, horizontal: 10.0),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // User and Status Row
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              record.userName,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black87,
+                                    final record =
+                                        attendaceReportDetails[index];
+                                    return Card(
+                                      margin: const EdgeInsets.symmetric(
+                                          vertical: 4.0, horizontal: 10.0),
+                                      elevation: 2,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 8.0, horizontal: 10.0),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // User and Status Row
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    record.userName,
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.black87,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  record.attendanceStatus,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        record.attendanceStatus ==
+                                                                "Logged In"
+                                                            ? Colors.green
+                                                            : const Color
+                                                                .fromARGB(255,
+                                                                241, 58, 58),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // In and Out Times Row
+                                            Row(
+                                              children: [
+                                                Icon(Icons.login,
+                                                    color: Colors.blueAccent,
+                                                    size: 14),
+                                                const SizedBox(width: 4),
+                                                Flexible(
+                                                  child: Text(
+                                                    'In: ${record.attendanceInTime} - ${record.logInLocationName}',
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.black54),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Icon(Icons.logout,
+                                                    color: Colors.redAccent,
+                                                    size: 14),
+                                                const SizedBox(width: 4),
+                                                Flexible(
+                                                  child: Text(
+                                                    'Out: ${record.attendanceOutTime} - ${record.logOutLocationName}',
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.black54),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // In and Out Dates Row
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Text(
+                                                  'In Date: ${record.attendanceInDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceInDate!) : "--"}',
+                                                  style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.black54),
+                                                ),
+                                                Text(
+                                                  'Out Date: ${record.attendanceOutDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceOutDate!) : "--"}',
+                                                  style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.black54),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : ListView.builder(
+                                  itemCount: roleReportDetails.length +
+                                      1, // Add one for the last record space
+                                  itemBuilder: (context, index) {
+                                    if (index == roleReportDetails.length) {
+                                      return const SizedBox(
+                                          height:
+                                              80); // Space for the last record
+                                    }
+
+                                    final report = roleReportDetails[index];
+
+                                    return GestureDetector(
+                                      // onTap: () async {
+                                      //   print('Tapped on: ${report.roleName}');
+                                      //   final selectedRole =
+                                      //       report.roleId as String;
+                                      //   print(
+                                      //       'Calling fetchAttendanceDetails() for role: $selectedRole');
+
+                                      //   try {
+                                      //     await fetchAttendanceDetails('',
+                                      //         ''); // Pass the selected roleId
+                                      //     print(
+                                      //         'API call completed successfully');
+                                      //   } catch (e) {
+                                      //     print('Error during API call: $e');
+                                      //   }
+                                      // },
+                                      child: Container(
+                                        margin: const EdgeInsets.symmetric(
+                                            vertical: 8.0),
+                                        padding: const EdgeInsets.all(16.0),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[100],
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color:
+                                                  Colors.grey.withOpacity(0.1),
+                                              spreadRadius: 1,
+                                              blurRadius: 8,
+                                              offset: Offset(0, 3),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 8.0),
+                                              decoration: const BoxDecoration(
+                                                border: Border(
+                                                  bottom: BorderSide(
+                                                    color: Color.fromARGB(
+                                                        255,
+                                                        201,
+                                                        199,
+                                                        199), // Border color
+                                                    width: 1.0, // Border width
+                                                  ),
+                                                ),
                                               ),
-                                              overflow: TextOverflow.ellipsis,
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.start,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  // Optional space between texts
+
+                                                  Expanded(
+                                                    child: Text(
+                                                      report.roleName,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: Colors.blueGrey,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  // Optional space between texts
+                                                  Expanded(
+                                                    child: Text(
+                                                      'No Of Staff: ${report.totalAttendance}',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors
+                                                            .blueGrey[700],
+                                                        fontSize: 15,
+                                                      ),
+                                                      textAlign: TextAlign
+                                                          .right, // Corrected here
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            record.attendanceStatus,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: record.attendanceStatus ==
-                                                      "Logged In"
-                                                  ? Colors.green
-                                                  : const Color.fromARGB(
-                                                      255, 241, 58, 58),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    'Logged In: ${report.loggedInCount}',
+                                                    style: TextStyle(
+                                                      color: Colors.green[700],
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Not Logged In: ${report.notLoggedInCount}',
+                                                    style: TextStyle(
+                                                      color: Colors.red[700],
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                    textAlign: TextAlign.right,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                      const SizedBox(height: 4),
-                                      // In and Out Times Row
-                                      Row(
-                                        children: [
-                                          Icon(Icons.login,
-                                              color: Colors.blueAccent,
-                                              size: 14),
-                                          const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              'In: ${record.attendanceInTime} - ${record.logInLocationName}',
-                                              style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.black54),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.logout,
-                                              color: Colors.redAccent,
-                                              size: 14),
-                                          const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              'Out: ${record.attendanceOutTime} - ${record.logOutLocationName}',
-                                              style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.black54),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      // In and Out Dates Row
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'In Date: ${record.attendanceInDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceInDate!) : "--"}',
-                                            style: const TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.black54),
-                                          ),
-                                          Text(
-                                            'Out Date: ${record.attendanceOutDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceOutDate!) : "--"}',
-                                            style: const TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.black54),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                                    );
+                                  },
                                 ),
-                              );
-                            },
-                          ),
                         ),
-                      )
+                      ),
+                      const SizedBox(height: 4),
                     ],
                   ),
                 ),

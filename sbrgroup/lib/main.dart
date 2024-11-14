@@ -35,6 +35,8 @@ import 'screens/notification/notification_service.dart';
 // const int timeRange =
 //     5; // Allowable time range in minutes (e.g., between 11:10 AM and 11:15 AM)
 
+// Global navigator key
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -63,6 +65,14 @@ Future<void> main() async {
 // Background message handler
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print('Handling a background message: ${message.messageId}');
+
+  // Check if the payload contains a 'route' key
+  String route = message.data.containsKey('route')
+      ? message.data['route']
+      : '/main'; // Default to '/main' if 'route' is not provided
+
+  // Navigate to the desired route using the global navigator key
+  navigatorKey.currentState?.pushNamed(route); // Navigate to the route
 }
 
 // void main() {

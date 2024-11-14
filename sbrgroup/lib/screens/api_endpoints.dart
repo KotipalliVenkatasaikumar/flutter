@@ -20,11 +20,19 @@ class ApiService {
   static const String baseUrl2 = 'http://15.207.212.144/';
   static const String baseUrl3 = 'http://15.207.212.144/';
   static const String baseUrl4 = 'http://15.207.212.144/';
+  static const String notificationUrl = 'http://15.207.212.144';
 
   // static const String baseUrl1 = 'http://13.200.83.139/';
   // static const String baseUrl2 = 'http://13.200.83.139/';
   // static const String baseUrl3 = 'http://13.200.83.139/';
   // static const String baseUrl4 = 'http://13.200.83.139/';
+
+  // static const String baseUrl1 = 'https://c772-49-207-221-168.ngrok-free.app/';
+  // static const String baseUrl2 = 'https://c772-49-207-221-168.ngrok-free.app/';
+  // static const String baseUrl3 = 'https://c772-49-207-221-168.ngrok-free.app/';
+  // static const String baseUrl4 = 'https://c772-49-207-221-168.ngrok-free.app/';
+  // static const String notificationUrl =
+  //     'https://c772-49-207-221-168.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
@@ -143,6 +151,7 @@ class ApiService {
       'identifier': identifier,
       'password': password,
       'androidId': androidId,
+      'organizationId': 2,
     });
   }
 
@@ -150,6 +159,7 @@ class ApiService {
   //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
   //     'identifier': identifier,
   //     'password': password,
+  //     'organizationId': 2,
   //   });
   // }
 
@@ -791,10 +801,11 @@ class ApiService {
       int userId,
       int organizationId,
       String selectedLocation,
-      String selectedShift,
+      String shiftIds,
+      String selectedRole,
       String selectedDateRange) async {
     return await getRequest(baseUrl2,
-        'api/facility-management/attendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftId=$selectedShift&locationId=$selectedLocation&range=$selectedDateRange');
+        'api/facility-management/attendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange');
   }
 
   static Future<http.Response> fetchAttendanceLocation(
@@ -816,12 +827,133 @@ class ApiService {
       String attendanceStatus,
       String selectedLocation,
       String selectedShift,
+      String selectedRole,
       String selectedDateRange,
       String page,
       int size) async {
     return await getRequest(
         baseUrl2,
         // 'api/facility-management/attendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftId=$selectedShift&locationId=$selectedLocation&range=$selectedDateRange'
-        'api/facility-management/attendance/allAttendance?userName=$userName&userId=$userId&page=$page&size=$size&&attendanceStatus=$attendanceStatus&shiftId=$selectedShift&locationId=$selectedLocation&range=$selectedDateRange');
+        'api/facility-management/attendance/allAttendance?userName=$userName&userId=$userId&page=$page&size=$size&&attendanceStatus=$attendanceStatus&shiftIds=$selectedShift&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange');
+  }
+
+  // Method to store device token with query parameters (matching your Java backend)
+  static Future<http.Response> storeDeviceToken(
+      int userId, String deviceToken, String androidId) async {
+    // Prepare the data as URL query parameters
+    final String url = Uri.parse(
+            '$notificationUrl/api/user/fcm/storetoken?userId=$userId&deviceToken=$deviceToken&androidId=$androidId')
+        .toString();
+
+    // Headers setup: Adding Authorization header if accessToken exists
+    final Map<String, String> headers = {
+      'Content-Type': 'application/json',
+      if (accessToken != null)
+        'Authorization': 'Bearer $accessToken', // Add Authorization header
+      if (userId != null) 'proxyId': userId.toString(),
+      if (userId != null) 'userId': userId.toString(),
+    };
+
+    try {
+      // Send the POST request with query parameters in the URL and headers
+      final response = await http.post(
+        Uri.parse(url),
+        headers: headers, // Add the headers here
+      );
+
+      return response;
+    } catch (e) {
+      throw Exception("Error during post request: $e");
+    }
+  }
+
+  // static updateDeviceTokenWithAndroidId(int userId, String newToken, String androidId) {}
+
+  // Method to store device token with query parameters (using PUT method)
+  static Future<http.Response> updateDeviceTokenWithAndroidId(
+      int userId, String deviceToken, String androidId) async {
+    // Prepare the data as URL query parameters
+    final String url = Uri.parse(
+            '$notificationUrl/api/user/fcm/updateDeviceToken?userId=$userId&deviceToken=$deviceToken&androidId=$androidId')
+        .toString();
+
+    // Headers setup: Adding Authorization header if accessToken exists
+    final Map<String, String> headers = {
+      'Content-Type': 'application/json',
+      if (accessToken != null)
+        'Authorization': 'Bearer $accessToken', // Add Authorization header
+      if (userId != null) 'proxyId': userId.toString(),
+      if (userId != null) 'userId': userId.toString(),
+    };
+
+    try {
+      // Send the PUT request with query parameters in the URL and headers
+      final response = await http.put(
+        Uri.parse(url),
+        headers: headers, // Add the headers here
+      );
+
+      // Return the response for further processing
+      return response;
+    } catch (e) {
+      throw Exception("Error during PUT request: $e");
+    }
+  }
+
+  // Method to send notification using query parameters
+  static Future<http.Response> sendNotification(
+      List<int> userIds, String title, String body) async {
+    if (userIds.isEmpty) {
+      throw Exception("User IDs must not be empty.");
+    }
+
+    // Convert the list of user IDs to a comma-separated string
+    String userIdsString = userIds.join(',');
+
+    // Prepare the URL with query parameters
+    final String url = Uri.parse(
+      '$notificationUrl/api/user/fcm/sendnotification?userIds=$userIdsString&title=$title&body=$body',
+    ).toString();
+
+    // Setup headers
+    final Map<String, String> headers = {
+      'Content-Type': 'application/json',
+      if (accessToken != null)
+        'Authorization':
+            'Bearer $accessToken', // Add Authorization header if available
+    };
+
+    try {
+      // Send the POST request with query parameters in the URL and headers
+      final response = await http.post(
+        Uri.parse(url),
+        headers: headers, // Attach headers if necessary
+      );
+
+      // Return the response
+      return response;
+    } catch (e) {
+      throw Exception("Error sending notification: $e");
+    }
+  }
+
+  static Future<http.Response> fetchRoleReport(
+      int userId,
+      int organizationId,
+      String selectedLocation,
+      String shiftIds,
+      String selectedRole,
+      String selectedDateRange) async {
+    // Ensure that there are no invisible characters
+    final String url =
+        'api/facility-management/attendance/rolebasedreport?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds&locationId=$selectedLocation&range=$selectedDateRange';
+
+    return await getRequest(baseUrl2, url);
+  }
+
+  static Future<http.Response> fetchRoles(
+      int? organizationId, String selectedLocation) async {
+    return await getRequest(baseUrl2,
+        'api/hrm/employee/getrolebasedonproject?organizationId=$organizationId&locationId=$selectedLocation');
   }
 }
