@@ -41,45 +41,45 @@ class ErrorHandler {
     // _sendErrorEmail(errorDetails);
   }
 
-  /// Static method to send error details to the API
-  static Future<void> _sendErrorToApi(String errorDetails) async {
-    // Replace with your API endpoint URL
+  // /// Static method to send error details to the API
+  // static Future<void> _sendErrorToApi(String errorDetails) async {
+  //   // Replace with your API endpoint URL
 
-    try {
-      final response = await ApiService.sendError(errorDetails);
+  //   try {
+  //     final response = await ApiService.sendError(errorDetails);
 
-      if (response.statusCode == 200) {
-        print('Error details sent to API successfully');
-      } else {
-        print('Failed to send error details to API: ${response.statusCode}');
-        _sendErrorEmail(errorDetails); // Send email on API error
-      }
-    } catch (e) {
-      print('Error sending error details to API: $e');
-      _sendErrorEmail(errorDetails); // Send email on API error
-    }
-  }
+  //     if (response.statusCode == 200) {
+  //       print('Error details sent to API successfully');
+  //     } else {
+  //       print('Failed to send error details to API: ${response.statusCode}');
+  //       _sendErrorEmail(errorDetails); // Send email on API error
+  //     }
+  //   } catch (e) {
+  //     print('Error sending error details to API: $e');
+  //     _sendErrorEmail(errorDetails); // Send email on API error
+  //   }
+  // }
 
-  /// Static method to send error details via SMTP email using mailer package
-  static Future<void> _sendErrorEmail(String errorMessage) async {
-    const String senderEmail =
-        'corenuts.externalprojects@gmail.com'; // Replace with your sender email
-    const String senderPassword =
-        'qvra ffkd cpdr vmis'; // Replace with your sender password
+  // /// Static method to send error details via SMTP email using mailer package
+  // static Future<void> _sendErrorEmail(String errorMessage) async {
+  //   const String senderEmail =
+  //       'corenuts.externalprojects@gmail.com'; // Replace with your sender email
+  //   const String senderPassword =
+  //       'qvra ffkd cpdr vmis'; // Replace with your sender password
 
-    final smtpServer = gmail(senderEmail, senderPassword);
+  //   final smtpServer = gmail(senderEmail, senderPassword);
 
-    final message = Message()
-      ..from = Address(senderEmail, 'Building Reality')
-      ..recipients.add('kvs040899@gmail.com')
-      ..subject = 'Error Report'
-      ..text = errorMessage;
+  //   final message = Message()
+  //     ..from = Address(senderEmail, 'Building Reality')
+  //     ..recipients.add('kvs040899@gmail.com')
+  //     ..subject = 'Error Report'
+  //     ..text = errorMessage;
 
-    try {
-      final sendReport = await send(message, smtpServer);
-      print('Email sent: $sendReport');
-    } catch (e) {
-      print('Error sending email: $e');
-    }
-  }
+  //   try {
+  //     final sendReport = await send(message, smtpServer);
+  //     print('Email sent: $sendReport');
+  //   } catch (e) {
+  //     print('Error sending email: $e');
+  //   }
+  // }
 }
