@@ -1,140 +1,141 @@
-import 'dart:async';
-
+import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/screens/util.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await NotificationService.instance.setupFlutterNotifications();
-  await NotificationService.instance.showNotification(message);
-}
+import 'package:flutter/material.dart';
 
 class NotificationService {
-  NotificationService._();
-  static final NotificationService instance = NotificationService._();
+  static final NotificationService _instance = NotificationService._internal();
+  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
-  final _messaging = FirebaseMessaging.instance;
-  final _localNotifications = FlutterLocalNotificationsPlugin();
-  bool _isFlutterLocalNotificationsInitialized = false;
+  NotificationService._internal();
+  String? _deviceToken;
+  String? _androidId;
+  int? _userId;
+  int? organizationId;
 
-  Future<void> initialize() async {
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  factory NotificationService() => _instance;
 
+  Future<void> initialize(GlobalKey<NavigatorState> navigatorKey) async {
     // Request permission
-    await _requestPermission();
+    NotificationSettings settings = await _messaging.requestPermission();
+    print('Notification permission: ${settings.authorizationStatus}');
+    _userId = await Util.getUserId();
+    _androidId = await Util.getUserAndroidId();
+    organizationId = await Util.getOrganizationId();
 
-    // Setup message handlers
-    await _setupMessageHandlers();
+    // Get and print the token
+    _messaging.getToken().then((token) {
+      _deviceToken = token;
+      print("Device Token: $_deviceToken");
 
-    // Get FCM token
-    final token = await _messaging.getToken();
-    print('FCM Token: $token');
-  }
+      if (_deviceToken != null && _androidId != null && _userId != null) {
+        _storeDeviceToken(
+            _userId!, _deviceToken!, _androidId!, organizationId!);
+      }
+    });
 
-  Future<void> _requestPermission() async {
-    final settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-      announcement: false,
-      carPlay: false,
-      criticalAlert: false,
-    );
+    // Listen to foreground notifications
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      _showNotificationDialog(message, navigatorKey);
+    });
 
-    print('Permission status: ${settings.authorizationStatus}');
-  }
+    // Handle app opened from notification
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _navigateToRoute(message, navigatorKey);
+    });
 
-  Future<void> setupFlutterNotifications() async {
-    if (_isFlutterLocalNotificationsInitialized) {
-      return;
+    // Handle notification when the app was terminated
+    RemoteMessage? initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      _navigateToRoute(initialMessage, navigatorKey);
     }
 
-    // android setup
-    const channel = AndroidNotificationChannel(
-      'high_importance_channel',
-      'High Importance Notifications',
-      description: 'This channel is used for important notifications.',
-      importance: Importance.high,
-    );
-
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
-    const initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/launcher_icon');
-
-    // ios setup
-    final initializationSettingsDarwin = DarwinInitializationSettings(
-      onDidReceiveLocalNotification: (id, title, body, payload) async {
-        // Handle iOS foreground notification
-      },
-    );
-
-    final initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-    );
-
-    // flutter notification setup
-    await _localNotifications.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (details) {},
-    );
-
-    _isFlutterLocalNotificationsInitialized = true;
+    // Listen for token refresh
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      print('Token refreshed: $newToken');
+      if (_androidId != null && _userId != null) {
+        _updateDeviceTokenInDatabase(
+            _userId!, newToken, _androidId!, organizationId!);
+      }
+    });
   }
 
-  Future<void> showNotification(RemoteMessage message) async {
-    RemoteNotification? notification = message.notification;
-    AndroidNotification? android = message.notification?.android;
-    if (notification != null && android != null) {
-      await _localNotifications.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            'high_importance_channel',
-            'High Importance Notifications',
-            channelDescription:
-                'This channel is used for important notifications.',
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: '@mipmap/launcher_icon',
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
+  void _showNotificationDialog(
+      RemoteMessage message, GlobalKey<NavigatorState> navigatorKey) {
+    if (navigatorKey.currentContext != null) {
+      showDialog(
+        context: navigatorKey.currentContext!,
+        builder: (_) => AlertDialog(
+          title: Text(message.notification?.title ?? 'Notification'),
+          content: Text(message.notification?.body ?? 'No content'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(navigatorKey.currentContext!).pop();
+                _navigateToRoute(message, navigatorKey);
+              },
+              child: Text('View'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(navigatorKey.currentContext!).pop();
+              },
+              child: Text('Dismiss'),
+            ),
+          ],
         ),
-        payload: message.data.toString(),
       );
     }
   }
 
-  Future<void> _setupMessageHandlers() async {
-    //foreground message
-    FirebaseMessaging.onMessage.listen((message) {
-      showNotification(message);
-    });
+  void _navigateToRoute(
+      RemoteMessage message, GlobalKey<NavigatorState> navigatorKey) {
+    String route = message.data['route'] ?? '/main';
+    navigatorKey.currentState?.pushNamed(route);
+  }
 
-    // background message
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessage);
+  // // Retrieve Android ID
+  // Future<String?> _getAndroidId() async {
+  //   DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  //   AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+  //   return androidInfo.id;
+  // }
 
-    // opened app
-    final initialMessage = await _messaging.getInitialMessage();
-    if (initialMessage != null) {
-      _handleBackgroundMessage(initialMessage);
+  // Method to update device token and Android ID in the backend
+  Future<void> _updateDeviceTokenInDatabase(
+      int userId, String newToken, String androidId, int organizationId) async {
+    try {
+      final response = await ApiService.updateDeviceTokenWithAndroidId(
+          userId, newToken, androidId, organizationId);
+      print("Response Status: ${response.statusCode}");
+      if (response.statusCode == 200) {
+        print(
+            "Device token and Android ID updated successfully in the database");
+      } else {
+        print("Failed to update device token: ${response.body}");
+      }
+    } catch (e) {
+      print("Error while updating device token and Android ID: $e");
     }
   }
 
-  void _handleBackgroundMessage(RemoteMessage message) {
-    if (message.data['type'] == 'chat') {
-      // open chat screen
+  // Method to store device token with query parameters (matching your Java backend)
+  Future<void> _storeDeviceToken(int userId, String deviceToken,
+      String androidId, int organizationId) async {
+    try {
+      final response = await ApiService.storeDeviceToken(
+          userId, deviceToken, androidId, organizationId);
+
+      print("Response Status: ${response.statusCode}");
+      print("Response Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        print("Device token stored successfully");
+      } else {
+        print("Failed to store device token: ${response.body}");
+      }
+    } catch (e) {
+      print("Error while sending token to server: $e");
     }
   }
 }

@@ -1,3 +1,6 @@
+import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/screens/util.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/profile/profile_screen.dart';
@@ -14,13 +17,13 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
       leading: GestureDetector(
-        onTap: () {
-          Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                  builder: (context) =>
-                      const HomeScreen())); // Modify this line according to how your navigation is set up
-        },
+        // onTap: () {
+        //   Navigator.pushReplacement(
+        //       context,
+        //       MaterialPageRoute(
+        //           builder: (context) =>
+        //               const HomeScreen())); // Modify this line according to how your navigation is set up
+        // },
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Image.asset('lib/assets/images/ajna.png'),
@@ -68,8 +71,60 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   void _logout(BuildContext context) async {
+    bool isDeleted = await _deleteDeviceTokenInDatabase();
+
+    if (isDeleted) {
+      print("Logout successful, device token deleted.");
+    } else {
+      print("Logout successful, but failed to delete device token.");
+    }
+
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    // Navigate to the login screen
     Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
+
+  Future<bool> _deleteDeviceTokenInDatabase() async {
+    try {
+      int? userId = await Util.getUserId();
+      String? androidId = await Util.getUserAndroidId();
+      int? organizationId = await Util.getOrganizationId();
+      String? deviceToken = await Util.getDeviceToken();
+
+      if (userId != null &&
+          androidId != null &&
+          organizationId != null &&
+          deviceToken != null) {
+        final response = await ApiService.deleteDeviceToken(
+            userId, androidId, organizationId, deviceToken);
+
+        if (response.statusCode == 200) {
+          print("Device token deleted successfully.");
+          bool isClearedLocally = await Util.clearDeviceToken();
+          if (isClearedLocally) {
+            print("Device token cleared from both server and local storage.");
+          } else {
+            print("Failed to clear the device token locally.");
+          }
+          return true;
+        } else {
+          print("Failed to delete device token: ${response.body}");
+          return false;
+        }
+      } else {
+        print("Required details are missing; cannot delete device token.");
+        return false;
+      }
+    } catch (e) {
+      print("Error while deleting device token: $e");
+      return false;
+    }
+  }
+
+  // Future<String?> getAndroidId() async {
+  //   DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  //   AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+  //   return androidInfo.id; // This provides the unique device ID
+  // }
 }

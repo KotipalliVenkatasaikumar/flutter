@@ -1,14 +1,23 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/custom_date_picker.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
+import 'package:install_plugin/install_plugin.dart';
 import 'package:intl/intl.dart';
 import 'package:multi_select_flutter/dialog/multi_select_dialog_field.dart';
 import 'package:multi_select_flutter/util/multi_select_item.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Attendance {
   final int count;
@@ -183,6 +192,8 @@ class AttendanceReportScreen extends StatefulWidget {
 }
 
 class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
+  final ConnectivityHandler connectivityHandler = ConnectivityHandler();
+
   bool isLoading = true;
   List<Attendance> attendanceRecords = [];
   List<AttendanceRecord> attendaceReportDetails = [];
@@ -210,12 +221,27 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   bool isNotificationSent = false;
 
   bool showAttendanceList = true;
+  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
+  bool _isDownloading = false; // Add downloading state
+  double _downloadProgress = 0.0; // Add download progress
 
   @override
   void initState() {
     super.initState();
-    _initializeData();
-    _scrollController.addListener(_scrollListener);
+    // _initializeData();
+    // _checkForUpdate();
+    // _scrollController.addListener(_scrollListener);
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    bool isConnected = await connectivityHandler.checkConnectivity(context);
+    if (isConnected) {
+      // Proceed with other initialization steps if connected
+      _initializeData();
+      _checkForUpdate();
+      _scrollController.addListener(_scrollListener);
+    }
   }
 
   @override
@@ -232,7 +258,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
       fetchShiftData();
       fetchAttendanceLocation(organizationId!);
       fetchRoleReport(); // API call for Role Report
-      fetchRoles();
+      // fetchRoles();
     } catch (error) {
       ErrorHandler.handleError(
         context,
@@ -329,7 +355,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   }
 
   Future<void> fetchAttendanceLocation(int organizationId) async {
-    fetchRoles();
+    // fetchRoles();
 
     try {
       final response = await ApiService.fetchAttendanceLocation(organizationId);
@@ -483,8 +509,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Future<void> refreshData() async {
     await fetchAttendanceDashboard();
     // attendaceReportDetails = [];
-    fetchAttendanceDetails('', '');
-    fetchRoleReport(); // API call for Role Report
+    // fetchAttendanceDetails('', '');
+    await _initializeData();
+    _checkForUpdate();
   }
 
   Future<void> fetchAttendanceDetails(
@@ -645,6 +672,131 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     });
   }
 
+  // app update check
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final response = await ApiService.checkForUpdate();
+      if (response.statusCode == 200) {
+        final latestVersion = jsonDecode(response.body)['commonRefValue'];
+        final packageInfo = await PackageInfo.fromPlatform();
+        final currentVersion = packageInfo.version;
+
+        if (latestVersion != currentVersion) {
+          final apkUrlResponse = await ApiService.getApkDownloadUrl();
+          if (apkUrlResponse.statusCode == 200) {
+            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
+            setState(() {});
+
+            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+
+            if (isDeleted) {
+              print("Logout successful, device token deleted.");
+            } else {
+              print("Logout successful, but failed to delete device token.");
+            }
+            // Clear user session data
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.clear();
+
+            // Show update dialog
+            _showUpdateDialog(_apkUrl);
+          } else {
+            print(
+                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
+          }
+        } else {
+          setState(() {});
+        }
+      } else {
+        print('Failed to fetch latest app version: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error checking for update: $e');
+      setState(() {});
+    }
+  }
+
+  void _showUpdateDialog(String apkUrl) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Prevent dialog from closing on tap outside
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Update Available'),
+            content: const Text(
+                'A new version of the app is available. Please update.'),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop(); // Dismiss dialog
+                  await downloadAndInstallAPK(apkUrl);
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  Future<void> downloadAndInstallAPK(String url) async {
+    Dio dio = Dio();
+    String savePath = await getFilePath('ajna-app-release.apk');
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      await dio.download(
+        url,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      if (await Permission.requestInstallPackages.request().isGranted) {
+        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
+            .then((result) {
+          print('Install result: $result');
+          // After installation, navigate back to the login page
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+            (Route<dynamic> route) => false,
+          );
+        }).catchError((error) {
+          print('Install error: $error');
+        });
+      } else {
+        print('Install permission denied.');
+      }
+    } catch (e) {
+      print('Download error: $e');
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
+  Future<String> getFilePath(String fileName) async {
+    Directory tempDir = await getTemporaryDirectory();
+    String tempPath = tempDir.path;
+    return '$tempPath/$fileName';
+  }
+
   @override
   Widget build(BuildContext context) {
     double screenWidth = MediaQuery.of(context).size.width;
@@ -653,12 +805,38 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
-        title: Text(
-          'Attendance Report',
-          style: TextStyle(
-            fontSize: screenWidth > 600 ? 22 : 18,
-            color: Colors.white,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Attendance Report',
+              style: TextStyle(
+                fontSize: screenWidth > 600 ? 22 : 18,
+                color: Colors.white,
+              ),
+            ),
+            if (_isDownloading)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: LinearProgressIndicator(
+                        value: _downloadProgress,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.green),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${(_downloadProgress * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -744,8 +922,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                         ),
                                         prefixIcon: Icon(
                                           Icons.location_on,
-                                          color:
-                                              Color.fromARGB(255, 23, 158, 142),
+                                          color: Color.fromRGBO(6, 73, 105, 1),
                                         ),
                                         contentPadding:
                                             const EdgeInsets.symmetric(
@@ -762,8 +939,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                         ),
                                         enabledBorder: OutlineInputBorder(
                                           borderSide: BorderSide(
-                                            color: Color.fromARGB(
-                                                255, 41, 221, 200),
+                                            color:
+                                                Color.fromRGBO(8, 101, 145, 1),
                                             width: 1.0,
                                           ),
                                           borderRadius:
@@ -771,8 +948,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                         ),
                                         focusedBorder: OutlineInputBorder(
                                           borderSide: BorderSide(
-                                            color: Color.fromARGB(
-                                                255, 23, 158, 142),
+                                            color:
+                                                Color.fromRGBO(6, 73, 105, 1),
                                             width: 2.0,
                                           ),
                                           borderRadius:
@@ -970,6 +1147,29 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                       TextButton(
                                         onPressed: () {
                                           setState(() {
+                                            // Select all shifts that contain "Night" in their commonRefKey
+                                            selectedShifts = shifts
+                                                .where((shift) => shift
+                                                    .commonRefKey
+                                                    .contains('All'))
+                                                .toList();
+                                            selectedShiftIds = selectedShifts
+                                                .map((shift) => shift.id)
+                                                .toList();
+                                          });
+                                          fetchAttendanceDashboard();
+                                        },
+                                        child: Text(
+                                          "All Shifts",
+                                          style: TextStyle(
+                                            color:
+                                                Color.fromRGBO(6, 73, 105, 1),
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
                                             // Select all shifts that contain "Morning" in their commonRefKey
                                             selectedShifts = shifts
                                                 .where((shift) => shift
@@ -985,7 +1185,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                         child: Text(
                                           "Morning Shifts",
                                           style: TextStyle(
-                                              color: Colors.teal.shade600),
+                                            color:
+                                                Color.fromRGBO(6, 73, 105, 1),
+                                          ),
                                         ),
                                       ),
                                       TextButton(
@@ -1003,10 +1205,12 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                           });
                                           fetchAttendanceDashboard();
                                         },
-                                        child: Text(
+                                        child: const Text(
                                           "Night Shifts",
                                           style: TextStyle(
-                                              color: Colors.teal.shade600),
+                                            color:
+                                                Color.fromRGBO(6, 73, 105, 1),
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -1024,21 +1228,22 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                       "Select Shifts",
                                       style: TextStyle(fontSize: 14),
                                     ),
-                                    selectedColor: Colors.teal,
+                                    selectedColor:
+                                        Color.fromRGBO(6, 73, 105, 1),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(8),
                                       color: Colors.white,
                                       border: Border.all(
-                                          color: Colors.teal.shade100),
+                                          color: Color.fromRGBO(6, 73, 105, 1)),
                                     ),
                                     buttonIcon: const Icon(
                                       Icons.access_time,
-                                      color: Colors.teal,
+                                      color: Color.fromRGBO(6, 73, 105, 1),
                                     ),
                                     buttonText: Text(
                                       "Select Shifts",
                                       style: TextStyle(
-                                        color: Colors.teal.shade600,
+                                        color: Color.fromRGBO(6, 73, 105, 1),
                                         fontWeight: FontWeight.w500,
                                         fontSize: 14,
                                       ),
@@ -1048,7 +1253,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                             0.75,
                                     itemsTextStyle:
                                         const TextStyle(fontSize: 12),
-                                    checkColor: Colors.teal,
+                                    checkColor: Color.fromRGBO(6, 73, 105, 1),
                                     dialogHeight:
                                         MediaQuery.of(context).size.height *
                                             0.5,
@@ -1078,6 +1283,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                               child: GestureDetector(
                                 onTap: () {
                                   setState(() {
+                                    showAttendanceList = true;
                                     selectedStatus = 'Logged In';
                                   });
                                   fetchAttendanceDetails(selectedStatus, '');
@@ -1131,6 +1337,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                               child: GestureDetector(
                                 onTap: () {
                                   setState(() {
+                                    showAttendanceList = true;
                                     selectedStatus = 'Not Logged In';
                                   });
                                   fetchAttendanceDetails(selectedStatus, '');
@@ -1240,45 +1447,48 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                           ),
 
                           // Second Row - Search Input
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0, vertical: 8.0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    decoration: InputDecoration(
-                                      hintText: 'Search by name...',
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade400),
+                          if (showAttendanceList)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0, vertical: 8.0),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      decoration: InputDecoration(
+                                        hintText: 'Search by name...',
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          borderSide: BorderSide(
+                                              color: Colors.grey.shade400),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          borderSide: BorderSide(
+                                              color: Colors.blue, width: 2),
+                                        ),
+                                        contentPadding: EdgeInsets.symmetric(
+                                            vertical: 12, horizontal: 16),
                                       ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                            color: Colors.blue, width: 2),
-                                      ),
-                                      contentPadding: EdgeInsets.symmetric(
-                                          vertical: 12, horizontal: 16),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          searchQuery = value;
+                                        });
+                                        if (searchQuery.length >= 3 ||
+                                            searchQuery.isEmpty) {
+                                          fetchAttendanceDetails(
+                                              selectedStatus, searchQuery);
+                                        }
+                                      },
                                     ),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        searchQuery = value;
-                                      });
-                                      if (searchQuery.length >= 3 ||
-                                          searchQuery.isEmpty) {
-                                        fetchAttendanceDetails(
-                                            selectedStatus, searchQuery);
-                                      }
-                                    },
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
                         ],
                       ),
                       const SizedBox(

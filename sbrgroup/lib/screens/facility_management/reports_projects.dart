@@ -1,12 +1,21 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:ajna/main.dart';
+import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/facility_management/schedule_with_report.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/reports_location.dart';
 import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:install_plugin/install_plugin.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'custom_date_picker.dart'; // Import the new LocationsScreen
 
@@ -31,20 +40,38 @@ class Project {
 }
 
 class ReportsHomeScreen extends StatefulWidget {
+  const ReportsHomeScreen({super.key});
   @override
   _ReportsHomeScreenState createState() => _ReportsHomeScreenState();
 }
 
 class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
+  final ConnectivityHandler connectivityHandler = ConnectivityHandler();
   List<Project> projects = [];
   bool isLoading = true;
   int? intOrganizationId;
   String selectedDateRange = '0'; // Initialize with '0' for today
 
+  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
+  bool _isDownloading = false; // Add downloading state
+  double _downloadProgress = 0.0; // Add download progress
+  bool _isDialogShown = false; // Flag to track dialog visibility
+
   @override
   void initState() {
     super.initState();
-    initializeData();
+    // initializeData();
+    // _checkForUpdate();
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    bool isConnected = await connectivityHandler.checkConnectivity(context);
+    if (isConnected) {
+      // Proceed with other initialization steps if connected
+      initializeData();
+      _checkForUpdate();
+    }
   }
 
   Future<void> initializeData() async {
@@ -100,7 +127,7 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
   //   );
   // }
 
-  Future<void> fetchReportAndSchedule(int projectId) async {
+  Future<void> fetchReportAndSchedule(int projectId, String projectName) async {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -108,6 +135,7 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
           organizationId: intOrganizationId!,
           projectId: projectId,
           selectedDateRange: selectedDateRange,
+          projectName: projectName,
           // qrgeneratorId: 0,
         ),
       ),
@@ -125,6 +153,7 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
 
   Future<void> _refreshData() async {
     await initializeData();
+    _checkForUpdate();
   }
 
   void _onDateRangeSelected(
@@ -151,19 +180,205 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
     });
   }
 
+  Future<void> _checkForUpdate() async {
+    try {
+      final response = await ApiService.checkForUpdate();
+      if (response.statusCode == 200) {
+        final latestVersion = jsonDecode(response.body)['commonRefValue'];
+        final packageInfo = await PackageInfo.fromPlatform();
+        final currentVersion = packageInfo.version;
+
+        if (latestVersion != currentVersion) {
+          final apkUrlResponse = await ApiService.getApkDownloadUrl();
+          if (apkUrlResponse.statusCode == 200) {
+            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
+            setState(() {});
+
+            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+
+            if (isDeleted) {
+              print("Logout successful, device token deleted.");
+            } else {
+              print("Logout successful, but failed to delete device token.");
+            }
+            // Clear user session data
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.clear();
+
+            // Show update dialog
+            _showUpdateDialog(_apkUrl);
+          } else {
+            print(
+                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
+          }
+        } else {
+          setState(() {});
+        }
+      } else {
+        print('Failed to fetch latest app version: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error checking for update: $e');
+      setState(() {});
+    }
+  }
+
+  void _showUpdateDialog(String apkUrl) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Prevent dialog from closing on tap outside
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Update Available'),
+            content: const Text(
+                'A new version of the app is available. Please update.'),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop(); // Dismiss dialog
+                  await downloadAndInstallAPK(apkUrl);
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  Future<void> downloadAndInstallAPK(String url) async {
+    Dio dio = Dio();
+    String savePath = await getFilePath('ajna-app-release.apk');
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      await dio.download(
+        url,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      if (await Permission.requestInstallPackages.request().isGranted) {
+        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
+            .then((result) {
+          print('Install result: $result');
+          // After installation, navigate back to the login page
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+            (Route<dynamic> route) => false,
+          );
+        }).catchError((error) {
+          print('Install error: $error');
+        });
+      } else {
+        print('Install permission denied.');
+      }
+    } catch (e) {
+      print('Download error: $e');
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
+  Future<String> getFilePath(String fileName) async {
+    Directory tempDir = await getTemporaryDirectory();
+    String tempPath = tempDir.path;
+    return '$tempPath/$fileName';
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Retrieve the arguments
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+
+    String title = args?['title'] ?? 'Default Title';
+    String body = args?['body'] ?? 'Default Body';
+
+    // Show a dialog with the notification details if it hasn't been shown
+    if (!_isDialogShown && args != null) {
+      Future.microtask(() {
+        setState(() {
+          _isDialogShown = true; // Set the flag to prevent multiple dialogs
+        });
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text(title),
+            content: Text(body),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  setState(() {
+                    _isDialogShown =
+                        false; // Reset flag to allow future dialogs
+                  });
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      });
+    }
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
-        iconTheme: const IconThemeData(
-          color: Colors.white,
-        ),
-        title: const Text('Project Wise - QR Scan Report',
-            style: TextStyle(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Project Wise - QR Scan Report',
+              style: TextStyle(
+                fontSize: screenWidth > 600 ? 22 : 18,
                 color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold)),
+              ),
+            ),
+            if (_isDownloading)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: LinearProgressIndicator(
+                        value: _downloadProgress,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.green),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${(_downloadProgress * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: RefreshIndicator(
         onRefresh: _refreshData,
@@ -196,7 +411,8 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
                           final project = projects[index];
                           return GestureDetector(
                             onTap: () {
-                              fetchReportAndSchedule(project.projectId);
+                              fetchReportAndSchedule(
+                                  project.projectId, project.projectName);
                             },
                             child: Padding(
                               padding: const EdgeInsets.all(10.0),

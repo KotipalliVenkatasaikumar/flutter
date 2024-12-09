@@ -27,12 +27,12 @@ class ApiService {
   // static const String baseUrl3 = 'http://13.200.83.139/';
   // static const String baseUrl4 = 'http://13.200.83.139/';
 
-  // static const String baseUrl1 = 'https://c772-49-207-221-168.ngrok-free.app/';
-  // static const String baseUrl2 = 'https://c772-49-207-221-168.ngrok-free.app/';
-  // static const String baseUrl3 = 'https://c772-49-207-221-168.ngrok-free.app/';
-  // static const String baseUrl4 = 'https://c772-49-207-221-168.ngrok-free.app/';
+  // static const String baseUrl1 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
+  // static const String baseUrl2 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
+  // static const String baseUrl3 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
+  // static const String baseUrl4 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
   // static const String notificationUrl =
-  //     'https://c772-49-207-221-168.ngrok-free.app';
+  //     'https://e7eb-122-171-19-252.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
@@ -838,11 +838,11 @@ class ApiService {
   }
 
   // Method to store device token with query parameters (matching your Java backend)
-  static Future<http.Response> storeDeviceToken(
-      int userId, String deviceToken, String androidId) async {
+  static Future<http.Response> storeDeviceToken(int userId, String deviceToken,
+      String androidId, int organizationId) async {
     // Prepare the data as URL query parameters
     final String url = Uri.parse(
-            '$notificationUrl/api/user/fcm/storetoken?userId=$userId&deviceToken=$deviceToken&androidId=$androidId')
+            '$notificationUrl/api/user/fcm/storetoken?userId=$userId&deviceToken=$deviceToken&androidId=$androidId&organizationId=$organizationId')
         .toString();
 
     // Headers setup: Adding Authorization header if accessToken exists
@@ -870,11 +870,11 @@ class ApiService {
   // static updateDeviceTokenWithAndroidId(int userId, String newToken, String androidId) {}
 
   // Method to store device token with query parameters (using PUT method)
-  static Future<http.Response> updateDeviceTokenWithAndroidId(
-      int userId, String deviceToken, String androidId) async {
+  static Future<http.Response> updateDeviceTokenWithAndroidId(int userId,
+      String deviceToken, String androidId, int organizationId) async {
     // Prepare the data as URL query parameters
     final String url = Uri.parse(
-            '$notificationUrl/api/user/fcm/updateDeviceToken?userId=$userId&deviceToken=$deviceToken&androidId=$androidId')
+            '$notificationUrl/api/user/fcm/updateDeviceToken?userId=$userId&deviceToken=$deviceToken&androidId=$androidId&organizationId=$organizationId')
         .toString();
 
     // Headers setup: Adding Authorization header if accessToken exists
@@ -955,5 +955,39 @@ class ApiService {
       int? organizationId, String selectedLocation) async {
     return await getRequest(baseUrl2,
         'api/hrm/employee/getrolebasedonproject?organizationId=$organizationId&locationId=$selectedLocation');
+  }
+
+  static Future<http.Response> deleteDeviceToken(
+    int userId,
+    String androidId,
+    int organizationId,
+    String deviceToken,
+  ) async {
+    // Prepare the data as URL query parameters
+    final String url = Uri.parse(
+            '$notificationUrl/api/user/fcm/delete?userId=$userId&androidId=$androidId&organizationId=$organizationId&deviceToken=$deviceToken')
+        .toString();
+
+    // Headers setup: Adding Authorization header if accessToken exists
+    final Map<String, String> headers = {
+      'Content-Type': 'application/json',
+      if (accessToken != null)
+        'Authorization': 'Bearer $accessToken', // Add Authorization header
+      if (userId != null) 'proxyId': userId.toString(),
+      if (userId != null) 'userId': userId.toString(),
+    };
+
+    try {
+      // Send the PUT request with query parameters in the URL and headers
+      final response = await http.delete(
+        Uri.parse(url),
+        headers: headers, // Add the headers here
+      );
+
+      // Return the response for further processing
+      return response;
+    } catch (e) {
+      throw Exception("Error during PUT request: $e");
+    }
   }
 }

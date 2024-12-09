@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:ajna/screens/connectivity_handler.dart';
+import 'package:ajna/screens/facility_management/reports_projects.dart';
 import 'package:ajna/screens/sqflite/database_helper.dart';
 import 'package:ajna/screens/sqflite/schedule.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter/services.dart';
@@ -42,8 +42,8 @@ Future<void> main() async {
   await Firebase.initializeApp();
   // await NotificationService.instance.initialize();
 
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
+  // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  NotificationService().initialize(navigatorKey);
   // // Check network connectivity
   // var connectivityResult = await Connectivity().checkConnectivity();
   // if (connectivityResult == ConnectivityResult.none) {
@@ -62,19 +62,32 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-// Background message handler
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  print('Handling a background message: ${message.messageId}');
+// Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+//   // This handler is called when the app is in the background or terminated
+//   print('Background Message: ${message.messageId}');
+//   String? route = message.data['route'] ?? '/main';
+//   navigatorKey.currentState?.pushNamed(route!);
+// }
 
-  // Check if the payload contains a 'route' key
-  String route = message.data.containsKey('route')
-      ? message.data['route']
-      : '/main'; // Default to '/main' if 'route' is not provided
+// // Background message handler
+// Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+//   print('Handling a background message: ${message.messageId}');
 
-  // Navigate to the desired route using the global navigator key
-  navigatorKey.currentState?.pushNamed(route); // Navigate to the route
-}
+//   // Extract route and message from payload, with fallback
+//   String? route = message.data['route']; // No default route
+//   String messageText =
+//       message.data['message'] ?? 'You have a new notification!';
 
+//   // Use the navigator key to navigate to the desired route
+//   if (navigatorKey.currentState != null) {
+//     navigatorKey.currentState?.pushNamed(
+//       route!,
+//       arguments: messageText, // Pass the message as an argument
+//     );
+//   } else {
+//     print('Navigator is null, could not perform navigation.');
+//   }
+// }
 // void main() {
 //   WidgetsFlutterBinding.ensureInitialized();
 //   initializeWorkManager(); // Initialize WorkManager
@@ -192,6 +205,7 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
+    final ConnectivityHandler connectivityHandler = ConnectivityHandler();
     return MaterialApp(
       title: 'AJNA',
       theme: ThemeData(
@@ -201,14 +215,30 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const LoginPage(),
-      routes: {
-        '/main': (context) =>
-            const HomeScreen(), // Navigate to MainScreen after login
+      navigatorKey: navigatorKey,
+      home: Builder(
+        builder: (context) {
+          // Check for connectivity as soon as the app launches
+          connectivityHandler.checkConnectivity(context);
+          return const LoginPage(); // Your initial screen
+        },
+      ),
+      routes: appRoutes,
+      onUnknownRoute: (settings) {
+        return MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
+        );
       },
     );
   }
 }
+
+// Define routes in a separate constant map for scalability
+final Map<String, WidgetBuilder> appRoutes = {
+  '/login': (context) => const LoginPage(),
+  '/main': (context) => const HomeScreen(),
+  '/qrreport': (context) => const ReportsHomeScreen(),
+};
 
 class LoginForm extends StatelessWidget {
   const LoginForm({super.key});
@@ -307,6 +337,14 @@ class _LoginPageState extends State<LoginPage> {
             setState(() {
               _isUpdateAvailable = true;
             });
+
+            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+
+            if (isDeleted) {
+              print("Logout successful, device token deleted.");
+            } else {
+              print("Logout successful, but failed to delete device token.");
+            }
 
             // Clear user session data
             SharedPreferences prefs = await SharedPreferences.getInstance();
