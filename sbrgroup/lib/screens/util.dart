@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:ajna/screens/api_endpoints.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Util {
@@ -105,8 +106,6 @@ class Util {
     }
   }
 
-  
-
   static Future<List<String>?> getIconsAndLabels() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String>? iconsAndLabels = prefs.getStringList('iconsAndLabels');
@@ -122,5 +121,68 @@ class Util {
       // Handle parsing failure
     }
     return intId;
+  }
+
+  static Future<bool> saveDeviceToken(String deviceToken) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString('deviceToken', deviceToken);
+      return true; // Return true if saved successfully
+    } catch (e) {
+      print("Error saving device token: $e");
+      return false; // Return false if saving failed
+    }
+  }
+
+  static Future<String?> getDeviceToken() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('deviceToken');
+  }
+
+  static Future<bool> clearDeviceToken() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      return await prefs.remove('deviceToken'); // Remove the device token
+    } catch (e) {
+      print("Error clearing device token: $e");
+      return false; // Return false if an error occurs
+    }
+  }
+
+  static Future<bool> deleteDeviceTokenInDatabase() async {
+    try {
+      int? userId = await Util.getUserId();
+      String? androidId = await Util.getUserAndroidId();
+      int? organizationId = await Util.getOrganizationId();
+      String? deviceToken = await Util.getDeviceToken();
+
+      if (userId != null &&
+          androidId != null &&
+          organizationId != null &&
+          deviceToken != null) {
+        final response = await ApiService.deleteDeviceToken(
+            userId, androidId, organizationId, deviceToken);
+
+        if (response.statusCode == 200) {
+          print("Device token deleted successfully.");
+          bool isClearedLocally = await Util.clearDeviceToken();
+          if (isClearedLocally) {
+            print("Device token cleared from both server and local storage.");
+          } else {
+            print("Failed to clear the device token locally.");
+          }
+          return true;
+        } else {
+          print("Failed to delete device token: ${response.body}");
+          return false;
+        }
+      } else {
+        print("Required details are missing; cannot delete device token.");
+        return false;
+      }
+    } catch (e) {
+      print("Error while deleting device token: $e");
+      return false;
+    }
   }
 }

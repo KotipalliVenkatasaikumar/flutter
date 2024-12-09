@@ -1,11 +1,20 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:ajna/main.dart';
+import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:dio/dio.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
+import 'package:install_plugin/install_plugin.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class User {
@@ -28,14 +37,31 @@ class ResetAndroidIdScreen extends StatefulWidget {
 }
 
 class _ResetAndroidIdScreenState extends State<ResetAndroidIdScreen> {
+  final ConnectivityHandler connectivityHandler = ConnectivityHandler();
+
   int? selectedUserId;
   List<User> users = [];
   bool isLoading = true;
 
+  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
+  bool _isDownloading = false; // Add downloading state
+  double _downloadProgress = 0.0; // Add download progress
+
   @override
   void initState() {
     super.initState();
-    _getOrganizationId(); // Retrieve organizationId from utils
+    // _getOrganizationId(); // Retrieve organizationId from utils
+    // _checkForUpdate();
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    bool isConnected = await connectivityHandler.checkConnectivity(context);
+    if (isConnected) {
+      // Proceed with other initialization steps if connected
+      _getOrganizationId(); // Retrieve organizationId from utils
+      _checkForUpdate();
+    }
   }
 
   Future<void> _getOrganizationId() async {
@@ -164,118 +190,279 @@ class _ResetAndroidIdScreenState extends State<ResetAndroidIdScreen> {
 
   Future<void> refreshData() async {
     await _getOrganizationId();
+    _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final response = await ApiService.checkForUpdate();
+      if (response.statusCode == 200) {
+        final latestVersion = jsonDecode(response.body)['commonRefValue'];
+        final packageInfo = await PackageInfo.fromPlatform();
+        final currentVersion = packageInfo.version;
+
+        if (latestVersion != currentVersion) {
+          final apkUrlResponse = await ApiService.getApkDownloadUrl();
+          if (apkUrlResponse.statusCode == 200) {
+            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
+            setState(() {});
+
+            // Clear user session data
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.clear();
+
+            // Show update dialog
+            _showUpdateDialog(_apkUrl);
+          } else {
+            print(
+                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
+          }
+        } else {
+          setState(() {});
+        }
+      } else {
+        print('Failed to fetch latest app version: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error checking for update: $e');
+      setState(() {});
+    }
+  }
+
+  void _showUpdateDialog(String apkUrl) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Prevent dialog from closing on tap outside
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Update Available'),
+            content: const Text(
+                'A new version of the app is available. Please update.'),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop(); // Dismiss dialog
+                  await downloadAndInstallAPK(apkUrl);
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  Future<void> downloadAndInstallAPK(String url) async {
+    Dio dio = Dio();
+    String savePath = await getFilePath('ajna-app-release.apk');
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      await dio.download(
+        url,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      if (await Permission.requestInstallPackages.request().isGranted) {
+        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
+            .then((result) {
+          print('Install result: $result');
+          // After installation, navigate back to the login page
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+            (Route<dynamic> route) => false,
+          );
+        }).catchError((error) {
+          print('Install error: $error');
+        });
+      } else {
+        print('Install permission denied.');
+      }
+    } catch (e) {
+      print('Download error: $e');
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
+  Future<String> getFilePath(String fileName) async {
+    Directory tempDir = await getTemporaryDirectory();
+    String tempPath = tempDir.path;
+    return '$tempPath/$fileName';
   }
 
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
     return Scaffold(
+      // appBar: AppBar(
+      //   backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+      //   title: const Text(
+      //     'Reset Android ID',
+      //     style: TextStyle(
+      //       fontSize: 18,
+      //       color: Colors.white,
+      //     ),
+      //   ),
+      //   centerTitle: true,
+      //   iconTheme: const IconThemeData(
+      //     color: Colors.white,
+      //   ),
+      // ),
+
       appBar: AppBar(
         backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
-        title: const Text(
-          'Reset Android ID',
-          style: TextStyle(
-            fontSize: 18,
-            color: Colors.white,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Reset Android ID',
+              style: TextStyle(
+                fontSize: screenWidth > 600 ? 22 : 18,
+                color: Colors.white,
+              ),
+            ),
+            if (_isDownloading)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: LinearProgressIndicator(
+                        value: _downloadProgress,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.green),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${(_downloadProgress * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         centerTitle: true,
-        iconTheme: const IconThemeData(
-          color: Colors.white,
-        ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: RefreshIndicator(
         onRefresh: refreshData,
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    const SizedBox(height: 15),
-                    const Text(
-                      'Select a User to Reset Android ID',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.normal,
-                        color: Color.fromARGB(255, 125, 125, 124),
+            : SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      const SizedBox(height: 15),
+                      const Text(
+                        'Select a User to Reset Android ID',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.normal,
+                          color: Color.fromARGB(255, 125, 125, 124),
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    DropdownButtonFormField2<int>(
-                      value: selectedUserId,
-                      hint: const Text('Select User',
-                          style: TextStyle(
-                              fontSize: 16,
-                              color: Color.fromARGB(255, 80, 79, 79))),
-                      items: users.map((User user) {
-                        return DropdownMenuItem<int>(
-                          value: user.userId,
-                          child: Text(user.userName),
-                        );
-                      }).toList(),
-                      onChanged: (newValue) {
-                        setState(() {
-                          selectedUserId = newValue;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 41, 221, 200),
-                              width: 1.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 23, 158, 142),
-                              width: 2.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 15),
-                      ),
-                      //dropdownColor: Colors.white,
-                      dropdownStyleData: DropdownStyleData(
-                        maxHeight: 400,
-                        width: MediaQuery.of(context).size.width - 32,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8.0),
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (selectedUserId != null) {
-                          _resetAndroidId(selectedUserId!).then((_) {
-                            setState(() {
-                              selectedUserId =
-                                  null; // Reset the dropdown selection
-                            });
+                      const SizedBox(height: 20),
+                      DropdownButtonFormField2<int>(
+                        value: selectedUserId,
+                        hint: const Text('Select User',
+                            style: TextStyle(
+                                fontSize: 16,
+                                color: Color.fromARGB(255, 80, 79, 79))),
+                        items: users.map((User user) {
+                          return DropdownMenuItem<int>(
+                            value: user.userId,
+                            child: Text(user.userName),
+                          );
+                        }).toList(),
+                        onChanged: (newValue) {
+                          setState(() {
+                            selectedUserId = newValue;
                           });
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color.fromARGB(235, 23, 135, 182),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10.0),
+                        },
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(
+                                color: Color.fromARGB(255, 41, 221, 200),
+                                width: 1.0),
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(
+                                color: Color.fromARGB(255, 23, 158, 142),
+                                width: 2.0),
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 15),
+                        ),
+                        //dropdownColor: Colors.white,
+                        dropdownStyleData: DropdownStyleData(
+                          maxHeight: 400,
+                          width: MediaQuery.of(context).size.width - 32,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8.0),
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10.0),
-                        child: Text(
-                          'Reset Android ID',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
+                      const SizedBox(height: 30),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (selectedUserId != null) {
+                            _resetAndroidId(selectedUserId!).then((_) {
+                              setState(() {
+                                selectedUserId =
+                                    null; // Reset the dropdown selection
+                              });
+                            });
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Color.fromARGB(235, 23, 135, 182),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 10.0),
+                          child: Text(
+                            'Reset Android ID',
+                            style: TextStyle(fontSize: 16, color: Colors.white),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
       ),

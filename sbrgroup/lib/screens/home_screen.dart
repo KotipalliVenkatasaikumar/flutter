@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/facility_management/schedule_with_report.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -43,7 +44,7 @@ void main() {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -99,6 +100,7 @@ class IconButtonWidget extends StatelessWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ConnectivityHandler connectivityHandler = ConnectivityHandler();
   List<Map<String, dynamic>>? _iconDetails;
 
   final Set<String> staticLabels = {
@@ -257,22 +259,38 @@ class _HomeScreenState extends State<HomeScreen> {
   String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
   bool _isDownloading = false; // Add downloading state
   double _downloadProgress = 0.0; // Add download progress
+
   String? androidId;
   late FirebaseMessaging _messaging;
   String? _deviceToken;
   int? userId;
+  int? organizationId;
+
   @override
   void initState() {
     super.initState();
-
+    // _initializeData();
+    // _checkForUpdate();
+    // _initializeFirebaseMessaging();
     _initializeData();
-    _checkForUpdate();
-    _initializeFirebaseMessaging();
+    _checkConnectivity();
+  }
+
+  // Method to check connectivity when the app starts
+  Future<void> _checkConnectivity() async {
+    bool isConnected = await connectivityHandler.checkConnectivity(context);
+    if (isConnected) {
+      // Proceed with other initialization steps if connected
+      _checkForUpdate();
+      _initializeFirebaseMessaging();
+    }
   }
 
   Future<void> _initializeData() async {
-    androidId = await getAndroidId();
+    androidId = await Util.getUserAndroidId();
     userId = await Util.getUserId();
+    organizationId = await Util.getOrganizationId();
+
     List<String>? iconLabels = await Util.getIconsAndLabels();
     List<Map<String, dynamic>> matchedIcons = [];
 
@@ -288,124 +306,88 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _iconDetails = matchedIcons;
     });
+
+    // fetchHeadline();
   }
 
-  void _initializeFirebaseMessaging() async {
-    _messaging = FirebaseMessaging.instance;
+  Future<void> _initializeFirebaseMessaging() async {
+    try {
+      // Initialize Firebase Messaging
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-    // Request permission for iOS
-    NotificationSettings settings = await _messaging.requestPermission();
-    print('User granted permission: ${settings.authorizationStatus}');
+      // Request notification permissions
+      NotificationSettings settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    // Get the device token for FCM
-    _messaging.getToken().then((token) {
-      setState(() {
-        _deviceToken = token;
-      });
-      print("Device Token: $_deviceToken");
-
-      // Call method to store the token in your server
-      if (_deviceToken != null && userId != null) {
-        _storeDeviceToken(userId!, _deviceToken!, androidId!);
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        print("Notifications permission denied by the user.");
+        return;
       }
-    });
 
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print("Received message: ${message.notification?.title}");
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text(message.notification?.title ?? 'No Title'),
-          content: Text(message.notification?.body ?? 'No Body'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context)
-                    .pop(); // Close the dialog when "OK" is pressed
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    });
+      // Retry logic to get the device token
+      String? token = await _getDeviceTokenWithRetry();
+      if (token != null) {
+        print("Device Token: $token");
 
-    // Handle messages that open the app (foreground/background)
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print("Message opened: ${message.notification?.title}");
-      // Navigate to the home page when the notification is clicked
-      navigatorKey.currentState?.pushNamed('/main');
-
-      // Show the dialog with "OK" button when the app is opened from a notification
-      showDialog(
-        context: navigatorKey.currentContext!,
-        builder: (_) => AlertDialog(
-          title: Text(message.notification?.title ?? 'No Title'),
-          content: Text(message.notification?.body ?? 'No Body'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(navigatorKey.currentContext!)
-                    .pop(); // Close the dialog
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    });
-
-    // Handle the initial notification when the app is launched from a terminated state
-    RemoteMessage? initialMessage =
-        await FirebaseMessaging.instance.getInitialMessage();
-    if (initialMessage != null) {
-      print("Initial message: ${initialMessage.notification?.title}");
-      // Navigate to home page when the app is launched from a notification
-      navigatorKey.currentState?.pushNamed('/main');
-
-      // Show a dialog with the notification details and an "OK" button
-      showDialog(
-        context: navigatorKey.currentContext!,
-        builder: (_) => AlertDialog(
-          title: Text(initialMessage.notification?.title ?? 'No Title'),
-          content: Text(initialMessage.notification?.body ?? 'No Body'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(navigatorKey.currentContext!)
-                    .pop(); // Close the dialog
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    }
-// Listen for token refresh
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
-      print("New device token: $newToken");
-
-      if (userId != null) {
-        if (androidId != null) {
-          _updateDeviceTokenInDatabase(userId!, newToken, androidId!);
+        // Save token locally and handle errors
+        bool isSaved = await Util.saveDeviceToken(token);
+        if (isSaved) {
+          print("Device token saved locally.");
+        } else {
+          print("Failed to save device token locally.");
         }
+
+        // Store token on the server and handle errors
+        if (userId != null && organizationId != null && androidId != null) {
+          await _storeDeviceToken(userId!, token, androidId!, organizationId!);
+        }
+      } else {
+        print("Failed to retrieve device token after retries.");
       }
-    });
+
+      // Listen for token refresh
+      messaging.onTokenRefresh.listen((newToken) async {
+        print("New device token: $newToken");
+
+        if (userId != null && androidId != null && organizationId != null) {
+          await _updateDeviceTokenInDatabase(
+              userId!, newToken, androidId!, organizationId!);
+        }
+      });
+    } catch (e) {
+      print("Error initializing Firebase Messaging: $e");
+    }
   }
 
-  Future<String?> getAndroidId() async {
-    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-    return androidInfo.id; // This provides the unique device ID
+  Future<String?> _getDeviceTokenWithRetry(
+      {int retries = 3, Duration delay = const Duration(seconds: 2)}) async {
+    String? token;
+    for (int attempt = 0; attempt < retries; attempt++) {
+      token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        return token;
+      }
+      print("Retrying to fetch device token... Attempt: ${attempt + 1}");
+      await Future.delayed(delay);
+    }
+    return null; // Return null if token retrieval fails after retries
   }
+
+  // Future<String?> getAndroidId() async {
+  //   DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  //   AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+  //   return androidInfo.id; // This provides the unique device ID
+  // }
 
   // Method to update device token and Android ID in the backend
   Future<void> _updateDeviceTokenInDatabase(
-      int userId, String newToken, String androidId) async {
+      int userId, String newToken, String androidId, int organizationId) async {
     try {
       final response = await ApiService.updateDeviceTokenWithAndroidId(
-          userId, newToken, androidId);
+          userId, newToken, androidId, organizationId);
       print("Response Status: ${response.statusCode}");
       if (response.statusCode == 200) {
         print(
@@ -419,11 +401,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Method to store device token with query parameters (matching your Java backend)
-  Future<void> _storeDeviceToken(
-      int userId, String deviceToken, String androidId) async {
+  Future<void> _storeDeviceToken(int userId, String deviceToken,
+      String androidId, int organizationId) async {
     try {
-      final response =
-          await ApiService.storeDeviceToken(userId, deviceToken, androidId);
+      final response = await ApiService.storeDeviceToken(
+          userId, deviceToken, androidId, organizationId);
 
       print("Response Status: ${response.statusCode}");
       print("Response Body: ${response.body}");
@@ -452,6 +434,13 @@ class _HomeScreenState extends State<HomeScreen> {
             _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
             setState(() {});
 
+            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+
+            if (isDeleted) {
+              print("Logout successful, device token deleted.");
+            } else {
+              print("Logout successful, but failed to delete device token.");
+            }
             // Clear user session data
             SharedPreferences prefs = await SharedPreferences.getInstance();
             await prefs.clear();
@@ -556,6 +545,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshData() async {
     await _initializeData();
+    _checkForUpdate();
   }
 
   Future<Map<String, String?>> getUserDetails() async {
@@ -565,8 +555,44 @@ class _HomeScreenState extends State<HomeScreen> {
     return {'userName': userName, 'designation': designation};
   }
 
+  // Future<void> fetchHeadline() async {
+  //   try {
+  //     final response = await http.get(
+  //       Uri.parse(
+  //           'https://your-api-url.com/headline?userId=$userId'), // API with userId query parameter
+  //     );
+
+  //     if (response.statusCode == 200) {
+  //       var data = json.decode(response.body);
+  //       setState(() {
+  //         headline = data['headline'] ?? "No headline available for this user";
+  //       });
+  //     } else {
+  //       setState(() {
+  //         headline = "Failed to fetch headline";
+  //       });
+  //     }
+  //   } catch (e) {
+  //     setState(() {
+  //       headline = "Error fetching headline";
+  //     });
+  //   }
+  // }
+
   @override
   Widget build(BuildContext context) {
+    final String? messageText =
+        ModalRoute.of(context)?.settings.arguments as String?;
+
+    // Display the SnackBar after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (messageText != null) {
+        // Show a SnackBar with the notification message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(messageText)),
+        );
+      }
+    });
     return Scaffold(
       appBar: const CustomAppBar(),
       body: RefreshIndicator(
@@ -665,6 +691,44 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
               ),
+              // Container(
+              //   height: 60,
+              //   margin: const EdgeInsets.symmetric(vertical: 20),
+              //   padding: const EdgeInsets.symmetric(horizontal: 20),
+              //   decoration: BoxDecoration(
+              //     gradient: LinearGradient(
+              //       colors: [Colors.blue, Colors.blueAccent],
+              //       begin: Alignment.topLeft,
+              //       end: Alignment.bottomRight,
+              //     ),
+              //     borderRadius: BorderRadius.circular(12),
+              //     boxShadow: [
+              //       BoxShadow(
+              //         color: Colors.black26,
+              //         offset: Offset(0, 2),
+              //         blurRadius: 6,
+              //       ),
+              //     ],
+              //   ),
+              //   child: SingleChildScrollView(
+              //     scrollDirection: Axis.horizontal, // Horizontal scrolling
+              //     child: Row(
+              //       children: [
+              //         Padding(
+              //           padding: const EdgeInsets.only(right: 30.0),
+              //           child: Text(
+              //             headline, // This will be the fetched headline
+              //             style: TextStyle(
+              //               fontSize: 18,
+              //               fontWeight: FontWeight.bold,
+              //               color: Colors.white,
+              //             ),
+              //           ),
+              //         ),
+              //       ],
+              //     ),
+              //   ),
+              // ),
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(16.0),

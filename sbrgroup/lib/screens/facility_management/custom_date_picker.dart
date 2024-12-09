@@ -126,12 +126,12 @@ class _CustomDateRangePickerState extends State<CustomDateRangePicker> {
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderSide: const BorderSide(
-                      color: Color.fromARGB(255, 41, 221, 200), width: 1.5),
+                      color: Color.fromRGBO(8, 101, 145, 1), width: 1.5),
                   borderRadius: BorderRadius.circular(8.0),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderSide: const BorderSide(
-                      color: Color.fromARGB(255, 23, 158, 142), width: 2),
+                      color: Color.fromRGBO(6, 73, 105, 1), width: 2),
                   borderRadius: BorderRadius.circular(8.0),
                 ),
               ),

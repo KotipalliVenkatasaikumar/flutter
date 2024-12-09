@@ -1,11 +1,20 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:ajna/main.dart';
+import 'package:ajna/screens/connectivity_handler.dart';
+import 'package:dio/dio.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:install_plugin/install_plugin.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class UserFormScreen extends StatefulWidget {
@@ -14,6 +23,7 @@ class UserFormScreen extends StatefulWidget {
 }
 
 class _UserFormScreenState extends State<UserFormScreen> {
+  final ConnectivityHandler connectivityHandler = ConnectivityHandler();
   final _formKey = GlobalKey<FormState>();
   final _userNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -25,11 +35,25 @@ class _UserFormScreenState extends State<UserFormScreen> {
   List<dynamic> _roles = [];
   List<dynamic> _managers = [];
   int? intOraganizationId;
+  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
+  bool _isDownloading = false; // Add downloading state
+  double _downloadProgress = 0.0; // Add download progress
 
   @override
   void initState() {
     super.initState();
-    initializeData();
+    // initializeData();
+    // _checkForUpdate();
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    bool isConnected = await connectivityHandler.checkConnectivity(context);
+    if (isConnected) {
+      // Proceed with other initialization steps if connected
+      initializeData();
+      _checkForUpdate();
+    }
   }
 
   Future<void> initializeData() async {
@@ -181,290 +205,451 @@ class _UserFormScreenState extends State<UserFormScreen> {
     }
   }
 
+  Future<void> _refreshData() async {
+    await initializeData();
+    _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final response = await ApiService.checkForUpdate();
+      if (response.statusCode == 200) {
+        final latestVersion = jsonDecode(response.body)['commonRefValue'];
+        final packageInfo = await PackageInfo.fromPlatform();
+        final currentVersion = packageInfo.version;
+
+        if (latestVersion != currentVersion) {
+          final apkUrlResponse = await ApiService.getApkDownloadUrl();
+          if (apkUrlResponse.statusCode == 200) {
+            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
+            setState(() {});
+
+            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+
+            if (isDeleted) {
+              print("Logout successful, device token deleted.");
+            } else {
+              print("Logout successful, but failed to delete device token.");
+            }
+            // Clear user session data
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.clear();
+
+            // Show update dialog
+            _showUpdateDialog(_apkUrl);
+          } else {
+            print(
+                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
+          }
+        } else {
+          setState(() {});
+        }
+      } else {
+        print('Failed to fetch latest app version: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error checking for update: $e');
+      setState(() {});
+    }
+  }
+
+  void _showUpdateDialog(String apkUrl) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Prevent dialog from closing on tap outside
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Update Available'),
+            content: const Text(
+                'A new version of the app is available. Please update.'),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop(); // Dismiss dialog
+                  await downloadAndInstallAPK(apkUrl);
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  Future<void> downloadAndInstallAPK(String url) async {
+    Dio dio = Dio();
+    String savePath = await getFilePath('ajna-app-release.apk');
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      await dio.download(
+        url,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      if (await Permission.requestInstallPackages.request().isGranted) {
+        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
+            .then((result) {
+          print('Install result: $result');
+          // After installation, navigate back to the login page
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+            (Route<dynamic> route) => false,
+          );
+        }).catchError((error) {
+          print('Install error: $error');
+        });
+      } else {
+        print('Install permission denied.');
+      }
+    } catch (e) {
+      print('Download error: $e');
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
+  Future<String> getFilePath(String fileName) async {
+    Directory tempDir = await getTemporaryDirectory();
+    String tempPath = tempDir.path;
+    return '$tempPath/$fileName';
+  }
+
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
-        title: const Text(
-          'New User Registration',
-          style: TextStyle(
-            fontSize: 18,
-            color: Colors.white,
-          ),
-        ),
-        centerTitle: true,
-        iconTheme: const IconThemeData(
-          color: Colors.white,
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment
-              .center, // Aligns children to the start of the column
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 15),
-            const Text(
-              'Enter New User Details',
+            Text(
+              'User Registration',
               style: TextStyle(
-                fontSize: 18,
-                color: Color.fromARGB(255, 125, 125, 124),
-                fontWeight: FontWeight.normal,
+                fontSize: screenWidth > 600 ? 22 : 18,
+                color: Colors.white,
               ),
             ),
-            const SizedBox(height: 20),
-            Form(
-              key: _formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  children: <Widget>[
-                    TextFormField(
-                      controller: _userNameController,
-                      decoration: InputDecoration(
-                        labelText: 'Name',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                              color: Color.fromARGB(255, 41, 221, 200),
-                              width: 1.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 23, 158, 142),
-                              width: 2.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a user name';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 41, 221, 200),
-                              width: 1.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 23, 158, 142),
-                              width: 2.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter an email';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _passwordController,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 41, 221, 200),
-                              width: 1.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 23, 158, 142),
-                              width: 2.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                      obscureText: true,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a password';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _phoneNumberController,
-                      decoration: InputDecoration(
-                        labelText: 'Phone Number',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 41, 221, 200),
-                              width: 1.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 23, 158, 142),
-                              width: 2.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a phone number';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    // Role Dropdown
-                    DropdownButtonFormField2<String>(
-                      decoration: InputDecoration(
-                        labelText: 'Role Name',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 41, 221, 200),
-                              width: 1.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 23, 158, 142),
-                              width: 2.0),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                      value: _selectedRole,
-                      items: _roles.isNotEmpty
-                          ? _roles.map<DropdownMenuItem<String>>((role) {
-                              return DropdownMenuItem<String>(
-                                value: role['roleId'].toString(),
-                                child: Text(role['roleName']),
-                              );
-                            }).toList()
-                          : [
-                              const DropdownMenuItem<String>(
-                                value: '',
-                                child: Text('No Roles Available'),
-                              )
-                            ],
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _selectedRole = newValue;
-                        });
-                      },
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please select a role';
-                        }
-                        return null;
-                      },
-                      isExpanded: true,
-                      dropdownStyleData: DropdownStyleData(
-                        maxHeight: 300,
-                        width: MediaQuery.of(context).size.width - 32,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
+            if (_isDownloading)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: LinearProgressIndicator(
+                        value: _downloadProgress,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.green),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    // Manager Dropdown
-                    DropdownButtonFormField2<String>(
-                      decoration: InputDecoration(
-                        labelText: 'Manager Name',
-                        // fillColor: Color.fromARGB(255, 204, 230, 237),
-                        // filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 41, 221, 200),
-                              width: 1.5),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                              color: Color.fromARGB(255, 23, 158, 142),
-                              width: 2),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                      value: _selectedManager,
-                      items: _managers.isNotEmpty
-                          ? _managers.map<DropdownMenuItem<String>>((manager) {
-                              return DropdownMenuItem<String>(
-                                value: manager['userId'].toString(),
-                                child: Text(manager['userName']),
-                              );
-                            }).toList()
-                          : [
-                              const DropdownMenuItem<String>(
-                                value: '',
-                                child: Text('No Managers Available'),
-                              )
-                            ],
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _selectedManager = newValue;
-                        });
-                      },
-                      isExpanded: true,
-                      dropdownStyleData: DropdownStyleData(
-                        maxHeight: 300,
-                        width: MediaQuery.of(context).size.width - 32,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8.0),
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Submit Button
-                    ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          _save(); // Save user data
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            const Color.fromARGB(235, 23, 135, 182),
-                        foregroundColor: Colors.white, // Custom text color
-                      ),
-                      child: const Padding(
-                        padding:
-                            EdgeInsets.symmetric(vertical: 10, horizontal: 36),
-                        child: Text(
-                          'Submit',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${(_downloadProgress * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
                     ),
                   ],
                 ),
               ),
-            ),
           ],
+        ),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment
+                  .center, // Aligns children to the start of the column
+              children: [
+                const SizedBox(height: 15),
+                const Text(
+                  'Enter New User Details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Color.fromARGB(255, 125, 125, 124),
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Form(
+                  key: _formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: <Widget>[
+                        TextFormField(
+                          controller: _userNameController,
+                          decoration: InputDecoration(
+                            labelText: 'Name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                  color: Color.fromARGB(255, 41, 221, 200),
+                                  width: 1.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 23, 158, 142),
+                                  width: 2.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter a user name';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        TextFormField(
+                          controller: _emailController,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 41, 221, 200),
+                                  width: 1.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 23, 158, 142),
+                                  width: 2.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter an email';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        TextFormField(
+                          controller: _passwordController,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 41, 221, 200),
+                                  width: 1.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 23, 158, 142),
+                                  width: 2.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                          obscureText: true,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter a password';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        TextFormField(
+                          controller: _phoneNumberController,
+                          decoration: InputDecoration(
+                            labelText: 'Phone Number',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 41, 221, 200),
+                                  width: 1.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 23, 158, 142),
+                                  width: 2.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter a phone number';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        // Role Dropdown
+                        DropdownButtonFormField2<String>(
+                          decoration: InputDecoration(
+                            labelText: 'Role Name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 41, 221, 200),
+                                  width: 1.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 23, 158, 142),
+                                  width: 2.0),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                          value: _selectedRole,
+                          items: _roles.isNotEmpty
+                              ? _roles.map<DropdownMenuItem<String>>((role) {
+                                  return DropdownMenuItem<String>(
+                                    value: role['roleId'].toString(),
+                                    child: Text(role['roleName']),
+                                  );
+                                }).toList()
+                              : [
+                                  const DropdownMenuItem<String>(
+                                    value: '',
+                                    child: Text('No Roles Available'),
+                                  )
+                                ],
+                          onChanged: (String? newValue) {
+                            setState(() {
+                              _selectedRole = newValue;
+                            });
+                          },
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please select a role';
+                            }
+                            return null;
+                          },
+                          isExpanded: true,
+                          dropdownStyleData: DropdownStyleData(
+                            maxHeight: 300,
+                            width: MediaQuery.of(context).size.width - 32,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Manager Dropdown
+                        DropdownButtonFormField2<String>(
+                          decoration: InputDecoration(
+                            labelText: 'Manager Name',
+                            // fillColor: Color.fromARGB(255, 204, 230, 237),
+                            // filled: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 41, 221, 200),
+                                  width: 1.5),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                  color: Color.fromARGB(255, 23, 158, 142),
+                                  width: 2),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                          value: _selectedManager,
+                          items: _managers.isNotEmpty
+                              ? _managers
+                                  .map<DropdownMenuItem<String>>((manager) {
+                                  return DropdownMenuItem<String>(
+                                    value: manager['userId'].toString(),
+                                    child: Text(manager['userName']),
+                                  );
+                                }).toList()
+                              : [
+                                  const DropdownMenuItem<String>(
+                                    value: '',
+                                    child: Text('No Managers Available'),
+                                  )
+                                ],
+                          onChanged: (String? newValue) {
+                            setState(() {
+                              _selectedManager = newValue;
+                            });
+                          },
+                          isExpanded: true,
+                          dropdownStyleData: DropdownStyleData(
+                            maxHeight: 300,
+                            width: MediaQuery.of(context).size.width - 32,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8.0),
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Submit Button
+                        ElevatedButton(
+                          onPressed: () {
+                            if (_formKey.currentState!.validate()) {
+                              _save(); // Save user data
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                const Color.fromARGB(235, 23, 135, 182),
+                            foregroundColor: Colors.white, // Custom text color
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 36),
+                            child: Text(
+                              'Submit',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,

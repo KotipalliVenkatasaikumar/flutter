@@ -57,6 +57,8 @@ dependencies {
     implementation "androidx.work:work-runtime-ktx:2.8.1" // Ensure this is the same version
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version" // Ensure this is correct
     implementation "androidx.work:work-runtime-ktx:2.7.1" // Adjust version as needed
+    implementation platform('com.google.firebase:firebase-bom:32.2.0') // Latest version
+    implementation 'com.google.firebase:firebase-messaging'
 }
 
 flutter {
