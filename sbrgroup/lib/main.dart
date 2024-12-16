@@ -39,11 +39,11 @@ import 'screens/notification/notification_service.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  // await Firebase.initializeApp();
   // await NotificationService.instance.initialize();
 
   // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  NotificationService().initialize(navigatorKey);
+  // NotificationService().initialize(navigatorKey);
   // // Check network connectivity
   // var connectivityResult = await Connectivity().checkConnectivity();
   // if (connectivityResult == ConnectivityResult.none) {
@@ -465,8 +465,8 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text;
       final password = _passwordController.text;
 
-      final response = await ApiService.login(email, password, androidId!);
-      // final response = await ApiService.login(email, password);
+      // final response = await ApiService.login(email, password, androidId!);
+      final response = await ApiService.login(email, password);
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(response.body);

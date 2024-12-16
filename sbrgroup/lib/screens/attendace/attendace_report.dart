@@ -856,20 +856,14 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                     children: [
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white, // Optional background color
-                          borderRadius: BorderRadius.circular(0),
-                          border: Border.all(
-                            color: Color.fromARGB(255, 204, 208,
-                                209), // Replace with your desired color
-                            width: 1.0, // Border thickness
-                          ),
-                          boxShadow: [
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                          boxShadow: const [
                             BoxShadow(
-                              color: const Color.fromARGB(255, 225, 223, 223)
-                                  .withOpacity(0.1),
-                              spreadRadius: 2,
+                              color: Colors.black12,
                               blurRadius: 8,
-                              offset: Offset(0, 2),
+                              offset: Offset(0, 4),
                             ),
                           ],
                         ),
@@ -892,9 +886,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                             ],
                           ),
                           //leading: Icon(Icons.info), // Custom leading icon
-                          trailing: Icon(
+                          trailing: const Icon(
                             Icons.filter_alt,
-                            size: 24,
                             color: Colors.grey,
                           ),
                           children: [
