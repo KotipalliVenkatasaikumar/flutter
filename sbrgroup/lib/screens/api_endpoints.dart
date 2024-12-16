@@ -26,13 +26,14 @@ class ApiService {
   // static const String baseUrl2 = 'http://13.200.83.139/';
   // static const String baseUrl3 = 'http://13.200.83.139/';
   // static const String baseUrl4 = 'http://13.200.83.139/';
+  // static const String notificationUrl = 'http://13.200.83.139';
 
-  // static const String baseUrl1 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
-  // static const String baseUrl2 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
-  // static const String baseUrl3 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
-  // static const String baseUrl4 = 'https://e7eb-122-171-19-252.ngrok-free.app/';
+  // static const String baseUrl1 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
+  // static const String baseUrl2 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
+  // static const String baseUrl3 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
+  // static const String baseUrl4 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
   // static const String notificationUrl =
-  //     'https://e7eb-122-171-19-252.ngrok-free.app';
+  //     'https://9dc8-49-207-202-13.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
@@ -145,23 +146,23 @@ class ApiService {
     }
   }
 
-  static Future<http.Response> login(
-      String identifier, String password, String androidId) async {
-    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
-      'identifier': identifier,
-      'password': password,
-      'androidId': androidId,
-      'organizationId': 2,
-    });
-  }
-
-  // static Future<http.Response> login(String identifier, String password) async {
+  // static Future<http.Response> login(
+  //     String identifier, String password, String androidId) async {
   //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
   //     'identifier': identifier,
   //     'password': password,
+  //     'androidId': androidId,
   //     'organizationId': 2,
   //   });
   // }
+
+  static Future<http.Response> login(String identifier, String password) async {
+    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
+      'identifier': identifier,
+      'password': password,
+      'organizationId': 2,
+    });
+  }
 
   static Future<http.Response> checkForUpdate() async {
     return await getRequest(
@@ -989,5 +990,39 @@ class ApiService {
     } catch (e) {
       throw Exception("Error during PUT request: $e");
     }
+  }
+
+  static Future<http.Response> fetchOrgProjectsInOtScreen(
+      int organizationId) async {
+    return await getRequest(baseUrl3,
+        'api/project/project/findAll?name=&organizationId=$organizationId');
+  }
+
+  static Future<http.Response> fetchOrgRoleInOtScreen(
+      int intOraganizationId) async {
+    return await getRequest(baseUrl1,
+        'api/user/role/fetchall?roleName=&organizationId=$intOraganizationId');
+  }
+
+  static Future<http.Response> fetchOrgEmployeeInOtScreen(
+      int intOraganizationId, int projectAssigned, int employeeRoleId) async {
+    return await getRequest(baseUrl1,
+        'api/hrm/employee/getall/org?organizationId=$intOraganizationId&firstName=&projectAssigned=$projectAssigned&employeeRoleId=$employeeRoleId');
+  }
+
+  static Future<http.Response> postOt(
+      Map<String, dynamic> employeeOTBean) async {
+    return await postRequest(
+        baseUrl1, 'api/facility-management/employeeOT/save', employeeOTBean);
+  }
+
+  static Future<http.Response> fetchOtReport({
+    required String projectName,
+    required String roleName,
+    required String firstName,
+    required String range,
+  }) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/employeeOT/employee/getall?projectName=$projectName&roleName=$roleName&firstName=$firstName&range=$range');
   }
 }

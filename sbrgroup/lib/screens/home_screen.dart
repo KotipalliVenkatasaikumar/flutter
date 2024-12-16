@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:ajna/screens/connectivity_handler.dart';
+import 'package:ajna/screens/facility_management/ot_report.dart';
+import 'package:ajna/screens/facility_management/ot_screen.dart';
 import 'package:ajna/screens/facility_management/schedule_with_report.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -123,6 +125,8 @@ class _HomeScreenState extends State<HomeScreen> {
     'Attendance Report',
     'Schedule Report',
     'Stored Data',
+    'OT',
+    'OT Report',
   };
 
   final List<Map<String, dynamic>> predefinedIcons = [
@@ -251,6 +255,20 @@ class _HomeScreenState extends State<HomeScreen> {
       'imagePath': 'lib/assets/images/account.png',
       'label': 'Stored Data',
       'onTap': () => SchedulesScreen(),
+    },
+    {
+      //'icon': Icons.construction,
+      'icon': null,
+      'imagePath': 'lib/assets/images/ot.png',
+      'label': 'OT',
+      'onTap': () => OtScreen(),
+    },
+    {
+      //'icon': Icons.construction,
+      'icon': null,
+      'imagePath': 'lib/assets/images/otreport.png',
+      'label': 'OT Report',
+      'onTap': () => OtReportScreen(),
     },
   ];
 

@@ -96,5 +96,7 @@ flutter:
     - lib/assets/images/calendar.png
     - lib/assets/images/ajna.png
     - lib/assets/images/corenuts-logo.png
+    - lib/assets/images/ot.png
+    - lib/assets/images/otreport.png
     - lib/assets/
   
