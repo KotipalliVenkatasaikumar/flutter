@@ -25,16 +25,17 @@ class ScanSchedule {
   final String userName;
   final int scheduleId;
   final bool isEnabled;
+  final String formatedScheduleTime;
 
-  ScanSchedule({
-    required this.projectName,
-    required this.location,
-    required this.scheduleTime,
-    required this.status,
-    required this.userName,
-    required this.scheduleId,
-    required this.isEnabled,
-  });
+  ScanSchedule(
+      {required this.projectName,
+      required this.location,
+      required this.scheduleTime,
+      required this.status,
+      required this.userName,
+      required this.scheduleId,
+      required this.isEnabled,
+      required this.formatedScheduleTime});
 
   factory ScanSchedule.fromJson(Map<String, dynamic> json, bool isEnabled) {
     String scheduleTimeStr = json['scheduleTime'];
@@ -55,6 +56,7 @@ class ScanSchedule {
       status: json['status'] ?? 'I', // Default to 'I' if status is missing
       userName: json['userName'],
       scheduleId: json['scheduleId'],
+      formatedScheduleTime: json['formatedScheduleTime'],
       isEnabled: isEnabled,
     );
   }
@@ -65,7 +67,50 @@ Future<List<ScanSchedule>> fetchScanSchedulesFromApi(
   try {
     final response = await ApiService.fetchScanSchedules(userId);
 
-    if (response.statusCode == 200) {
+    if (response.statusCode == 401) {
+      // Clear preferences and show session expired dialog
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Prevent dismissing dialog without action
+        builder: (context) => AlertDialog(
+          title: const Text('Session Expired'),
+          content: const Text(
+              'Your session has expired. Please log in again to continue.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close the dialog
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LoginPage(), // Login Page
+                  ),
+                );
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+
+      // Automatically navigate to login after 5 seconds if no action
+      Future.delayed(const Duration(seconds: 5), () {
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context); // Close dialog if still open
+        }
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const LoginPage(), // Login Page
+          ),
+        );
+      });
+
+      return [];
+    } else if (response.statusCode == 200) {
       List<dynamic> data = json.decode(response.body);
       DateFormat format = DateFormat("HH:mm"); // Assuming time format is HH:mm
       String formattedNow =
@@ -76,7 +121,7 @@ Future<List<ScanSchedule>> fetchScanSchedulesFromApi(
         try {
           scheduleTime = format.parse(item['scheduleTime']);
         } catch (e) {
-          scheduleTime = DateTime.now(); // Or handle according to your logic
+          scheduleTime = DateTime.now(); // Fallback to current time
         }
 
         Duration difference =
@@ -89,6 +134,7 @@ Future<List<ScanSchedule>> fetchScanSchedulesFromApi(
 
       return schedules;
     } else {
+      // Handle other status codes
       ErrorHandler.handleError(
         context,
         'Failed to load QR data. Please try again later.',
@@ -97,10 +143,11 @@ Future<List<ScanSchedule>> fetchScanSchedulesFromApi(
       return [];
     }
   } catch (e) {
+    // Handle any exceptions
     ErrorHandler.handleError(
       context,
       'Failed to load QR data. Please try again later.',
-      'Failed to load QR data: $e',
+      'Error occurred: $e',
     );
     return [];
   }
@@ -464,7 +511,7 @@ class _ScanScheduleScreenState extends State<ScanScheduleScreen> {
                                               vertical: 5),
                                           child: Center(
                                             child: Text(
-                                              schedule.scheduleTime,
+                                              schedule.formatedScheduleTime,
                                               style: TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,

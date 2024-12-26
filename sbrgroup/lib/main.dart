@@ -39,166 +39,13 @@ import 'screens/notification/notification_service.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();
+  await Firebase.initializeApp();
   // await NotificationService.instance.initialize();
 
   // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  // NotificationService().initialize(navigatorKey);
-  // // Check network connectivity
-  // var connectivityResult = await Connectivity().checkConnectivity();
-  // if (connectivityResult == ConnectivityResult.none) {
-  //   // No internet connection
-  //   runApp(const MyApp()); // Start the app in offline mode or show an error
-  // } else {
-  //   int? userId = await Util.getUserId(); // Ensure this is async if needed
-  //   // Fetch and store schedules only if userId is available and connected to the internet
-  //   if (userId != null) {
-  //     await deleteAllSchedules(); // Clear old schedules
-  //     await fetchAndStoreSchedules(userId); // Fetch new schedules
-  //   }
+  NotificationService().initialize(navigatorKey);
 
-  //   runApp(const MyApp());
-  // }
   runApp(const MyApp());
-}
-
-// Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-//   // This handler is called when the app is in the background or terminated
-//   print('Background Message: ${message.messageId}');
-//   String? route = message.data['route'] ?? '/main';
-//   navigatorKey.currentState?.pushNamed(route!);
-// }
-
-// // Background message handler
-// Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-//   print('Handling a background message: ${message.messageId}');
-
-//   // Extract route and message from payload, with fallback
-//   String? route = message.data['route']; // No default route
-//   String messageText =
-//       message.data['message'] ?? 'You have a new notification!';
-
-//   // Use the navigator key to navigate to the desired route
-//   if (navigatorKey.currentState != null) {
-//     navigatorKey.currentState?.pushNamed(
-//       route!,
-//       arguments: messageText, // Pass the message as an argument
-//     );
-//   } else {
-//     print('Navigator is null, could not perform navigation.');
-//   }
-// }
-// void main() {
-//   WidgetsFlutterBinding.ensureInitialized();
-//   initializeWorkManager(); // Initialize WorkManager
-//   runApp(MyApp());
-// }
-
-// void initializeWorkManager() {
-//   Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
-//   // Register a periodic task that runs every 24 hours
-//   Workmanager().registerPeriodicTask(
-//     "uniqueName", // Unique task name
-//     taskName, // Task identifier
-//     frequency: Duration(hours: 24), // Runs once every 24 hours
-//     initialDelay:
-//         Duration(hours: 24), // Delay to ensure it starts at 11:10 AM tomorrow
-//     constraints: Constraints(
-//       networkType: NetworkType.not_required, // Run offline or online
-//       requiresBatteryNotLow: true, // Optional: Run only when battery is not low
-//     ),
-//   );
-// }
-
-// void callbackDispatcher() {
-//   Workmanager().executeTask((task, inputData) async {
-//     if (task == taskName) {
-//       DateTime now = DateTime.now();
-//       if (isAround1110AM(now)) {
-//         await performApiCall(); // Only call the API around 11:10 AM
-//       }
-//     }
-//     return Future.value(true);
-//   });
-// }
-
-// // Check if current time is around 11:10 AM
-// bool isAround1110AM(DateTime currentTime) {
-//   return currentTime.hour == targetHour &&
-//       currentTime.minute >= targetMinute &&
-//       currentTime.minute <= (targetMinute + timeRange);
-// }
-
-// // Example API call function
-// Future<void> performApiCall() async {
-//   int? userId = await Util.getUserId();
-//   if (userId != null) {
-//     await deleteAllSchedules(); // Clear old schedules
-//     await fetchAndStoreSchedules(userId); // Fetch new schedules
-//   }
-// }
-
-Future<void> deleteAllSchedules() async {
-  try {
-    await DatabaseHelper.instance.deleteAllSchedules();
-  } catch (e) {
-    print('Error deleting all schedules: $e');
-  }
-}
-
-Future<void> fetchAndStoreSchedules(int userId) async {
-  final response = await ApiService.fetchScanSchedules(userId);
-  if (response.statusCode == 200) {
-    final data = json.decode(response.body);
-    if (data.isNotEmpty) {
-      final schedules = data
-          .map<ScanSchedule>((item) => ScanSchedule.fromJson(item))
-          .toList();
-      await processAndStoreSchedules(schedules);
-    } else {
-      print('No data found in the response.');
-    }
-  } else {
-    print('Failed to fetch schedules: ${response.statusCode}');
-    await retryTask(userId);
-  }
-}
-
-Future<void> retryTask(int userId) async {
-  for (int attempt = 1; attempt <= 2; attempt++) {
-    print('Retry attempt $attempt...');
-    await Future.delayed(const Duration(seconds: 5));
-    final response = await ApiService.fetchScanSchedules(userId);
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data.isNotEmpty) {
-        final schedules = data
-            .map<ScanSchedule>((item) => ScanSchedule.fromJson(item))
-            .toList();
-        await processAndStoreSchedules(schedules);
-        return;
-      }
-    }
-    print(
-        'Failed to fetch schedules on attempt $attempt: ${response.statusCode}');
-  }
-}
-
-Future<void> processAndStoreSchedules(List<ScanSchedule> schedules) async {
-  final db = await DatabaseHelper.instance.database;
-  final batch = db.batch();
-  try {
-    for (final schedule in schedules) {
-      batch.insert(
-        'scan_schedules',
-        schedule.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    await batch.commit(noResult: true);
-  } catch (e) {
-    print('Error processing and storing schedules: $e');
-  }
 }
 
 class MyApp extends StatelessWidget {
@@ -465,8 +312,8 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text;
       final password = _passwordController.text;
 
-      // final response = await ApiService.login(email, password, androidId!);
-      final response = await ApiService.login(email, password);
+      final response = await ApiService.login(email, password, androidId!);
+      // final response = await ApiService.login(email, password);
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(response.body);

@@ -88,7 +88,51 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
       var response = await ApiService.fetchReportProjectWise(
           intOrganizationId!, selectedDateRange);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 401) {
+        // Clear preferences and show session expired dialog
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // Show session expired dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false, // Prevent dismissing dialog without action
+          builder: (context) => AlertDialog(
+            title: const Text('Session Expired'),
+            content: const Text(
+                'Your session has expired. Please log in again to continue.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close the dialog
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginPage(), // Login Page
+                    ),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+
+        // Automatically navigate to login after 5 seconds if no action
+        Future.delayed(const Duration(seconds: 5), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context); // Close dialog if still open
+          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const LoginPage(), // Login Page
+            ),
+          );
+        });
+
+        return; // Early return since session expired
+      } else if (response.statusCode == 200) {
         List<dynamic> data = jsonDecode(response.body);
         setState(() {
           projects = data.map((item) => Project.fromJson(item)).toList();
