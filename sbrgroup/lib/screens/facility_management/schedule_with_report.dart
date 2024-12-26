@@ -44,6 +44,7 @@ class Schedule {
   final String? imageUrl; // This can be null
   final String createdDate;
   final String qrScanStatus;
+  final String formatedScheduleTime;
 
   Schedule({
     required this.projectName,
@@ -58,6 +59,7 @@ class Schedule {
     this.imageUrl, // Allow it to be null
     required this.createdDate,
     required this.qrScanStatus,
+    required this.formatedScheduleTime,
   });
 
   factory Schedule.fromJson(Map<String, dynamic> json) {
@@ -74,6 +76,7 @@ class Schedule {
       imageUrl: json['imageUrl'], // This can be null
       createdDate: json['createdDate'] ?? '',
       qrScanStatus: json['qrScanStatus'] ?? '',
+      formatedScheduleTime: json['formatedScheduleTime'] ?? '',
     );
   }
 }
@@ -168,7 +171,51 @@ class _ScheduleReportsScreenState extends State<ScheduleReportsScreen> {
         selectedDateRange,
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 401) {
+        // Clear preferences and show session expired dialog
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // Show session expired dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false, // Prevent dismissing dialog without action
+          builder: (context) => AlertDialog(
+            title: const Text('Session Expired'),
+            content: const Text(
+                'Your session has expired. Please log in again to continue.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close the dialog
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginPage(), // Login Page
+                    ),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+
+        // Automatically navigate to login after 5 seconds if no action
+        Future.delayed(const Duration(seconds: 5), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context); // Close dialog if still open
+          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const LoginPage(), // Login Page
+            ),
+          );
+        });
+
+        return; // Early return since session expired
+      } else if (response.statusCode == 200) {
         final List<dynamic> reportData = jsonDecode(response.body);
         setState(() {
           schedules =
@@ -643,7 +690,8 @@ class _ScheduleReportsScreenState extends State<ScheduleReportsScreen> {
                                                       const SizedBox(
                                                           width: 4.0),
                                                       Text(
-                                                        schedule.scheduleTime,
+                                                        schedule
+                                                            .formatedScheduleTime,
                                                         style: const TextStyle(
                                                           color: Colors.white,
                                                           fontSize: 12,

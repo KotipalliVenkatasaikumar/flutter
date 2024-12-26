@@ -146,23 +146,23 @@ class ApiService {
     }
   }
 
-  // static Future<http.Response> login(
-  //     String identifier, String password, String androidId) async {
-  //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
-  //     'identifier': identifier,
-  //     'password': password,
-  //     'androidId': androidId,
-  //     'organizationId': 2,
-  //   });
-  // }
-
-  static Future<http.Response> login(String identifier, String password) async {
+  static Future<http.Response> login(
+      String identifier, String password, String androidId) async {
     return await postRequest(baseUrl1, 'api/user/user/mob/login', {
       'identifier': identifier,
       'password': password,
+      'androidId': androidId,
       'organizationId': 2,
     });
   }
+
+  // static Future<http.Response> login(String identifier, String password) async {
+  //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
+  //     'identifier': identifier,
+  //     'password': password,
+  //     'organizationId': 2,
+  //   });
+  // }
 
   static Future<http.Response> checkForUpdate() async {
     return await getRequest(
