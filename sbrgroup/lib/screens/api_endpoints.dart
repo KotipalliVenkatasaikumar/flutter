@@ -16,17 +16,17 @@ class ApiService {
   // static const String baseUrl3 = 'http://localhost:1093/';
   // static const String baseUrl4 = 'http://localhost:1093/';
 
-  static const String baseUrl1 = 'http://15.207.212.144/';
-  static const String baseUrl2 = 'http://15.207.212.144/';
-  static const String baseUrl3 = 'http://15.207.212.144/';
-  static const String baseUrl4 = 'http://15.207.212.144/';
-  static const String notificationUrl = 'http://15.207.212.144';
+  // static const String baseUrl1 = 'http://15.207.212.144/';
+  // static const String baseUrl2 = 'http://15.207.212.144/';
+  // static const String baseUrl3 = 'http://15.207.212.144/';
+  // static const String baseUrl4 = 'http://15.207.212.144/';
+  // static const String notificationUrl = 'http://15.207.212.144';
 
-  // static const String baseUrl1 = 'http://13.200.83.139/';
-  // static const String baseUrl2 = 'http://13.200.83.139/';
-  // static const String baseUrl3 = 'http://13.200.83.139/';
-  // static const String baseUrl4 = 'http://13.200.83.139/';
-  // static const String notificationUrl = 'http://13.200.83.139';
+  static const String baseUrl1 = 'http://13.200.83.139/';
+  static const String baseUrl2 = 'http://13.200.83.139/';
+  static const String baseUrl3 = 'http://13.200.83.139/';
+  static const String baseUrl4 = 'http://13.200.83.139/';
+  static const String notificationUrl = 'http://13.200.83.139';
 
   // static const String baseUrl1 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
   // static const String baseUrl2 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
@@ -146,23 +146,23 @@ class ApiService {
     }
   }
 
-  static Future<http.Response> login(
-      String identifier, String password, String androidId) async {
-    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
-      'identifier': identifier,
-      'password': password,
-      'androidId': androidId,
-      'organizationId': 2,
-    });
-  }
-
-  // static Future<http.Response> login(String identifier, String password) async {
+  // static Future<http.Response> login(
+  //     String identifier, String password, String androidId) async {
   //   return await postRequest(baseUrl1, 'api/user/user/mob/login', {
   //     'identifier': identifier,
   //     'password': password,
+  //     'androidId': androidId,
   //     'organizationId': 2,
   //   });
   // }
+
+  static Future<http.Response> login(String identifier, String password) async {
+    return await postRequest(baseUrl1, 'api/user/user/mob/login', {
+      'identifier': identifier,
+      'password': password,
+      'organizationId': 2,
+    });
+  }
 
   static Future<http.Response> checkForUpdate() async {
     return await getRequest(
@@ -1024,5 +1024,11 @@ class ApiService {
   }) async {
     return await getRequest(baseUrl2,
         'api/facility-management/employeeOT/employee/getall?projectName=$projectName&roleName=$roleName&firstName=$firstName&range=$range');
+  }
+
+  static Future<http.Response> fetchOtReportProjectWise(
+      int organizationId, String selectedDateRange) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/employeeOT/employee/otcount?projectId=&organizationId=$organizationId&range=$selectedDateRange');
   }
 }

@@ -69,8 +69,8 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
     bool isConnected = await connectivityHandler.checkConnectivity(context);
     if (isConnected) {
       // Proceed with other initialization steps if connected
-      initializeData();
       _checkForUpdate();
+      initializeData();
     }
   }
 
@@ -147,13 +147,56 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
   }
 
   Future<void> refreshData() async {
-    await initializeData();
     _checkForUpdate();
+    await initializeData();
   }
 
   Future<void> _checkForUpdate() async {
     try {
       final response = await ApiService.checkForUpdate();
+
+      if (response.statusCode == 401) {
+        // Clear preferences and show session expired dialog
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // Show session expired dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Session Expired'),
+            content: const Text(
+                'Your session has expired. Please log in again to continue.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close the dialog
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+
+        // Automatically navigate to login after 5 seconds if no action
+        Future.delayed(const Duration(seconds: 5), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context); // Close dialog if still open
+          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+          );
+        });
+
+        return; // Early exit due to session expiration
+      }
+
       if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
@@ -164,17 +207,17 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
           if (apkUrlResponse.statusCode == 200) {
             _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
             setState(() {});
+            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
 
-            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+            // if (isDeleted) {
+            //   print("Logout successful, device token deleted.");
+            // } else {
+            //   print("Logout successful, but failed to delete device token.");
+            // }
 
-            if (isDeleted) {
-              print("Logout successful, device token deleted.");
-            } else {
-              print("Logout successful, but failed to delete device token.");
-            }
-            // Clear user session data
-            SharedPreferences prefs = await SharedPreferences.getInstance();
-            await prefs.clear();
+            // // Clear user session data
+            // SharedPreferences prefs = await SharedPreferences.getInstance();
+            // await prefs.clear();
 
             // Show update dialog
             _showUpdateDialog(_apkUrl);
@@ -183,7 +226,7 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                 'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
           }
         } else {
-          setState(() {});
+          setState(() {}); // Update state if no update required
         }
       } else {
         print('Failed to fetch latest app version: ${response.statusCode}');
@@ -249,11 +292,11 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
             .then((result) {
           print('Install result: $result');
           // After installation, navigate back to the login page
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginPage()),
-            (Route<dynamic> route) => false,
-          );
+          // Navigator.pushAndRemoveUntil(
+          //   context,
+          //   MaterialPageRoute(builder: (context) => const LoginPage()),
+          //   (Route<dynamic> route) => false,
+          // );
         }).catchError((error) {
           print('Install error: $error');
         });
