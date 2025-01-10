@@ -16,44 +16,73 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class EmployeeOtReport {
-  final int id;
-  final int projectId;
-  final String projectName;
-  final int roleId;
-  final String roleName;
-  final int employeeId;
-  final String firstName;
-  final String shiftTime;
-  final DateTime createdDate;
-  final String status;
+class EmployeeShift {
+  final int? id;
+  final int? projectId;
+  final String? projectName;
+  final int? roleId;
+  final String? roleName;
+  final int? employeeId;
+  final String? firstName;
+  final String? shiftTime;
+  final DateTime? createdDate;
+  final String? status;
+  final int? toLocation;
+  final String? toLocationName;
+  final int? organizationId;
 
-  EmployeeOtReport({
-    required this.id,
-    required this.projectId,
-    required this.projectName,
-    required this.roleId,
-    required this.roleName,
-    required this.employeeId,
-    required this.firstName,
-    required this.shiftTime,
-    required this.createdDate,
-    required this.status,
+  EmployeeShift({
+    this.id,
+    this.projectId,
+    this.projectName,
+    this.roleId,
+    this.roleName,
+    this.employeeId,
+    this.firstName,
+    this.shiftTime,
+    this.createdDate,
+    this.status,
+    this.toLocation,
+    this.toLocationName,
+    this.organizationId,
   });
 
-  factory EmployeeOtReport.fromJson(Map<String, dynamic> json) {
-    return EmployeeOtReport(
-      id: json['id'],
-      projectId: json['projectId'],
-      projectName: json['projectName'],
-      roleId: json['roleId'],
-      roleName: json['roleName'],
-      employeeId: json['employeeId'],
-      firstName: json['firstName'],
-      shiftTime: json['shiftTime'],
-      createdDate: DateTime.parse(json['createdDate']),
-      status: json['status'],
+  factory EmployeeShift.fromJson(Map<String, dynamic> json) {
+    return EmployeeShift(
+      id: json['id'] as int?,
+      projectId: json['projectId'] as int?,
+      projectName: json['projectName'] as String?,
+      roleId: json['roleId'] as int?,
+      roleName: json['roleName'] as String?,
+      employeeId: json['employeeId'] as int?,
+      firstName: json['firstName'] as String?,
+      shiftTime: json['shiftTime'] as String?,
+      createdDate: json['createdDate'] != null
+          ? DateTime.parse(json['createdDate'] as String)
+          : null,
+      status: json['status'] as String?,
+      toLocation: json['toLocation'] as int?,
+      toLocationName: json['toLocationName'] as String?,
+      organizationId: json['organizationId'] as int?,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'projectId': projectId,
+      'projectName': projectName,
+      'roleId': roleId,
+      'roleName': roleName,
+      'employeeId': employeeId,
+      'firstName': firstName,
+      'shiftTime': shiftTime,
+      'createdDate': createdDate?.toIso8601String(),
+      'status': status,
+      'toLocation': toLocation,
+      'toLocationName': toLocationName,
+      'organizationId': organizationId,
+    };
   }
 }
 
@@ -70,10 +99,10 @@ class _OtReportScreenState extends State<OtReportScreen> {
   final ConnectivityHandler connectivityHandler = ConnectivityHandler();
   final ScrollController _scrollController = ScrollController();
 
-  List<EmployeeOtReport> report = [];
+  List<EmployeeShift> report = [];
 
   bool isLoadingMore = false; // To track if more data is being loaded
-  String _apkUrl = 'http://www.corenuts.com/main-app-release.apk';
+  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
   bool _isDownloading = false; // Add downloading state
   double _downloadProgress = 0.0; // Add download progress
 
@@ -104,6 +133,7 @@ class _OtReportScreenState extends State<OtReportScreen> {
     bool isConnected = await connectivityHandler.checkConnectivity(context);
     if (isConnected) {
       // Proceed with other initialization steps if connected
+      _checkForUpdate();
       initializeData();
     }
   }
@@ -119,6 +149,11 @@ class _OtReportScreenState extends State<OtReportScreen> {
 
   Future<void> fetchOtReport({bool isLoadingMore = false}) async {
     try {
+      // Show loading indicator
+      setState(() {
+        isLoading = true;
+      });
+
       final response = await ApiService.fetchOtReport(
         projectName: projectSearchQuery ?? '',
         roleName: roleSearchQuery ?? '',
@@ -126,77 +161,45 @@ class _OtReportScreenState extends State<OtReportScreen> {
         range: selectedDateRange,
       );
 
-      // Check if the API call was successful
-      if (response.statusCode == 401) {
-        // Clear preferences and show session expired dialog
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.clear();
-
-        // Show session expired dialog
-        showDialog(
-          context: context,
-          barrierDismissible: false, // Prevent dismissing dialog without action
-          builder: (context) => AlertDialog(
-            title: const Text('Session Expired'),
-            content: const Text(
-                'Your session has expired. Please log in again to continue.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // Close the dialog
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const LoginPage(), // Login Page
-                    ),
-                  );
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-
-        // Automatically navigate to login after 5 seconds if no action
-        Future.delayed(const Duration(seconds: 5), () {
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context); // Close dialog if still open
-          }
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const LoginPage(), // Login Page
-            ),
-          );
-        });
-
-        return; // Early return since session expired
-      } else if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         print('API Response Data: $data');
 
         if (data.isNotEmpty) {
-          final List<EmployeeOtReport> fetchedReports =
-              data.map((item) => EmployeeOtReport.fromJson(item)).toList();
+          final List<EmployeeShift> fetchedReports =
+              data.map((item) => EmployeeShift.fromJson(item)).toList();
 
-          // Update the state with the fetched data
           setState(() {
-            report = fetchedReports;
+            // Append data if loading more, else replace the list
+            if (isLoadingMore) {
+              report.addAll(fetchedReports);
+            } else {
+              report = fetchedReports;
+            }
           });
         } else {
-          // If the data is empty, display a message in the UI
           setState(() {
-            report = [];
+            if (!isLoadingMore) {
+              report = []; // Clear the list if not loading more
+            }
           });
+          print('No data found.');
         }
       } else {
-        // Handle failure (non-200 response)
         throw Exception(
             'Failed to load OT reports. Status Code: ${response.statusCode}');
       }
     } catch (e) {
       print('Error: $e');
-      // Handle the error (e.g., show a toast or dialog)
+      // Provide user feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error fetching OT reports: $e')),
+      );
+    } finally {
+      // Hide loading indicator
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -259,6 +262,49 @@ class _OtReportScreenState extends State<OtReportScreen> {
   Future<void> _checkForUpdate() async {
     try {
       final response = await ApiService.checkForUpdate();
+
+      if (response.statusCode == 401) {
+        // Clear preferences and show session expired dialog
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // Show session expired dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Session Expired'),
+            content: const Text(
+                'Your session has expired. Please log in again to continue.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close the dialog
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+
+        // Automatically navigate to login after 5 seconds if no action
+        Future.delayed(const Duration(seconds: 5), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context); // Close dialog if still open
+          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+          );
+        });
+
+        return; // Early exit due to session expiration
+      }
+
       if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
@@ -269,16 +315,17 @@ class _OtReportScreenState extends State<OtReportScreen> {
           if (apkUrlResponse.statusCode == 200) {
             _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
             setState(() {});
-            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
 
-            if (isDeleted) {
-              print("Logout successful, device token deleted.");
-            } else {
-              print("Logout successful, but failed to delete device token.");
-            }
-            // Clear user session data
-            SharedPreferences prefs = await SharedPreferences.getInstance();
-            await prefs.clear();
+            // if (isDeleted) {
+            //   print("Logout successful, device token deleted.");
+            // } else {
+            //   print("Logout successful, but failed to delete device token.");
+            // }
+
+            // // Clear user session data
+            // SharedPreferences prefs = await SharedPreferences.getInstance();
+            // await prefs.clear();
 
             // Show update dialog
             _showUpdateDialog(_apkUrl);
@@ -287,7 +334,7 @@ class _OtReportScreenState extends State<OtReportScreen> {
                 'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
           }
         } else {
-          setState(() {});
+          setState(() {}); // Update state if no update required
         }
       } else {
         print('Failed to fetch latest app version: ${response.statusCode}');
@@ -325,7 +372,7 @@ class _OtReportScreenState extends State<OtReportScreen> {
 
   Future<void> downloadAndInstallAPK(String url) async {
     Dio dio = Dio();
-    String savePath = await getFilePath('main-app-release.apk');
+    String savePath = await getFilePath('ajna-app-release.apk');
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0.0;
@@ -349,15 +396,15 @@ class _OtReportScreenState extends State<OtReportScreen> {
       });
 
       if (await Permission.requestInstallPackages.request().isGranted) {
-        InstallPlugin.installApk(savePath, appId: 'com.example.sbrgrouperp')
+        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
             .then((result) {
           print('Install result: $result');
           // After installation, navigate back to the login page
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginPage()),
-            (Route<dynamic> route) => false,
-          );
+          // Navigator.pushAndRemoveUntil(
+          //   context,
+          //   MaterialPageRoute(builder: (context) => const LoginPage()),
+          //   (Route<dynamic> route) => false,
+          // );
         }).catchError((error) {
           print('Install error: $error');
         });
@@ -627,29 +674,110 @@ class _OtReportScreenState extends State<OtReportScreen> {
                             return Card(
                               margin: const EdgeInsets.symmetric(
                                   vertical: 5, horizontal: 8),
-                              elevation: 3,
+                              elevation: 4,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.all(12.0),
+                                padding: const EdgeInsets.all(16.0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'Name: ${currentReport.firstName}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.person,
+                                          color: Colors.blue,
+                                          size: 24,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          currentReport.firstName ??
+                                              'Unknown Name',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 5),
-                                    Text('Role: ${currentReport.roleName}'),
-                                    Text(
-                                        'Project: ${currentReport.projectName}'),
-                                    Text('Shift: ${currentReport.shiftTime}'),
-                                    Text(
-                                        'Date: ${currentReport.createdDate.toLocal().toString().split(' ')[0]}'),
+                                    const Divider(thickness: 1, height: 16),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.work,
+                                          color: Colors.green,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Role: ${currentReport.roleName ?? 'Not Assigned'}',
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.assignment,
+                                          color: Colors.orange,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Project: ${currentReport.projectName ?? 'Not Available'}',
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.access_time,
+                                          color: Colors.purple,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Shift: ${currentReport.shiftTime ?? 'Not Set'}',
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_today,
+                                          color: Colors.red,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          currentReport.createdDate != null
+                                              ? 'Date: ${currentReport.createdDate!.toLocal().toString().split(' ')[0]}'
+                                              : 'Date: Not Available',
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.location_on,
+                                          color: Colors.teal,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'To Location: ${currentReport.toLocationName ?? 'Not Available'}',
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),

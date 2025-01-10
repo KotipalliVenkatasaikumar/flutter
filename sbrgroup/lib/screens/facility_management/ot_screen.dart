@@ -45,6 +45,7 @@ class _OtScreenState extends State<OtScreen> {
   List<Map<String, dynamic>> _shifts = [];
 
   int? _selectedProjectId;
+  int? _selectedRelocationProjectId;
   int? _selectedRoleId;
   int? _selectedEmployeeId;
   String? _selectedShiftId;
@@ -69,8 +70,8 @@ class _OtScreenState extends State<OtScreen> {
     bool isConnected = await connectivityHandler.checkConnectivity(context);
     if (isConnected) {
       // Proceed with other initialization steps if connected
-      initializeData();
       _checkForUpdate();
+      initializeData();
     }
   }
 
@@ -225,13 +226,56 @@ class _OtScreenState extends State<OtScreen> {
   }
 
   Future<void> refreshData() async {
-    await initializeData();
     _checkForUpdate();
+    await initializeData();
   }
 
   Future<void> _checkForUpdate() async {
     try {
       final response = await ApiService.checkForUpdate();
+
+      if (response.statusCode == 401) {
+        // Clear preferences and show session expired dialog
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // Show session expired dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Session Expired'),
+            content: const Text(
+                'Your session has expired. Please log in again to continue.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close the dialog
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+
+        // Automatically navigate to login after 5 seconds if no action
+        Future.delayed(const Duration(seconds: 5), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context); // Close dialog if still open
+          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+          );
+        });
+
+        return; // Early exit due to session expiration
+      }
+
       if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
@@ -242,17 +286,17 @@ class _OtScreenState extends State<OtScreen> {
           if (apkUrlResponse.statusCode == 200) {
             _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
             setState(() {});
+            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
 
-            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+            // if (isDeleted) {
+            //   print("Logout successful, device token deleted.");
+            // } else {
+            //   print("Logout successful, but failed to delete device token.");
+            // }
 
-            if (isDeleted) {
-              print("Logout successful, device token deleted.");
-            } else {
-              print("Logout successful, but failed to delete device token.");
-            }
-            // Clear user session data
-            SharedPreferences prefs = await SharedPreferences.getInstance();
-            await prefs.clear();
+            // // Clear user session data
+            // SharedPreferences prefs = await SharedPreferences.getInstance();
+            // await prefs.clear();
 
             // Show update dialog
             _showUpdateDialog(_apkUrl);
@@ -261,7 +305,7 @@ class _OtScreenState extends State<OtScreen> {
                 'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
           }
         } else {
-          setState(() {});
+          setState(() {}); // Update state if no update required
         }
       } else {
         print('Failed to fetch latest app version: ${response.statusCode}');
@@ -327,11 +371,11 @@ class _OtScreenState extends State<OtScreen> {
             .then((result) {
           print('Install result: $result');
           // After installation, navigate back to the login page
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginPage()),
-            (Route<dynamic> route) => false,
-          );
+          // Navigator.pushAndRemoveUntil(
+          //   context,
+          //   MaterialPageRoute(builder: (context) => const LoginPage()),
+          //   (Route<dynamic> route) => false,
+          // );
         }).catchError((error) {
           print('Install error: $error');
         });
@@ -482,7 +526,7 @@ class _OtScreenState extends State<OtScreen> {
               const SizedBox(height: 20),
               DropdownButtonFormField2<int>(
                 decoration: InputDecoration(
-                  labelText: 'Select Project',
+                  labelText: 'Current Working Location',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
                   ),
@@ -665,6 +709,66 @@ class _OtScreenState extends State<OtScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+              DropdownButtonFormField2<int>(
+                decoration: InputDecoration(
+                  labelText: 'Select New Work Location',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(
+                        color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(
+                        color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                ),
+                value: _selectedRelocationProjectId,
+                items: _projects.isNotEmpty
+                    ? _projects.map<DropdownMenuItem<int>>(
+                        (Map<String, dynamic> project) {
+                        return DropdownMenuItem<int>(
+                          value: project['id'],
+                          child: Text(project['name'],
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Color.fromARGB(255, 80, 79, 79))),
+                        );
+                      }).toList()
+                    : [
+                        const DropdownMenuItem<int>(
+                          value: -1,
+                          child: Text('No new work location  Available'),
+                        )
+                      ],
+                onChanged: (int? value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedRelocationProjectId = value;
+                      // _fetchEmployee(intOraganizationId!, _selectedProjectId!,
+                      //     _selectedRoleId!);
+                    });
+                  }
+                },
+                validator: (value) {
+                  if (value == null || value == -1) {
+                    return 'Please select a new work location';
+                  }
+                  return null;
+                },
+                isExpanded: true,
+                dropdownStyleData: DropdownStyleData(
+                  maxHeight: 300,
+                  width: MediaQuery.of(context).size.width - 32,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
               DropdownButtonFormField2<String>(
                 decoration: InputDecoration(
                   labelText: 'Select Shift',
@@ -756,7 +860,8 @@ class _OtScreenState extends State<OtScreen> {
       'projectId': _selectedProjectId,
       'roleId': _selectedRoleId,
       'employeeId': _selectedEmployeeId,
-      'shiftTime': _selectedShiftId
+      'shiftTime': _selectedShiftId,
+      'toLocation': _selectedRelocationProjectId
     };
 
     try {
