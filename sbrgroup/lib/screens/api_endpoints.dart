@@ -4,12 +4,14 @@ import 'dart:io';
 import 'package:http_parser/http_parser.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as path; // Import the path package
+import 'package:path/path.dart' as path;
+import 'package:shared_preferences/shared_preferences.dart'; // Import the path package
 // Import for MediaType
 
 class ApiService {
   static int? userId;
   static String? accessToken;
+  static String? token;
 
   // static const String baseUrl1 = 'http://localhost:1093/';
   // static const String baseUrl2 = 'http://localhost:1093/';
@@ -22,11 +24,17 @@ class ApiService {
   // static const String baseUrl4 = 'http://15.207.212.144/';
   // static const String notificationUrl = 'http://15.207.212.144';
 
-  static const String baseUrl1 = 'http://13.200.83.139/';
-  static const String baseUrl2 = 'http://13.200.83.139/';
-  static const String baseUrl3 = 'http://13.200.83.139/';
-  static const String baseUrl4 = 'http://13.200.83.139/';
-  static const String notificationUrl = 'http://13.200.83.139';
+  // static const String baseUrl1 = 'http://65.2.49.230/';
+  // static const String baseUrl2 = 'http://65.2.49.230/';
+  // static const String baseUrl3 = 'http://65.2.49.230/';
+  // static const String baseUrl4 = 'http://65.2.49.230/';
+  // static const String notificationUrl = 'http://65.2.49.230';
+
+  static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
+  static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
 
   // static const String baseUrl1 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
   // static const String baseUrl2 = 'https://9dc8-49-207-202-13.ngrok-free.app/';
@@ -52,6 +60,7 @@ class ApiService {
     try {
       accessToken = await Util
           .getAccessToken(); // Ensure Util.getAccessToken() is defined
+      token = await Util.getToken();
       print('AccessToken in initialize: $accessToken');
     } catch (error) {
       print('Error during initialization: $error');
@@ -79,14 +88,84 @@ class ApiService {
       if (userId != null) 'userId': userId.toString(),
     };
 
-    final response = await http.post(
+    http.Response response = await http.post(
       uri,
       body: json.encode(data),
       headers: headers,
     );
 
+    if (response.statusCode == 401) {
+      // Attempt to refresh the token
+      final refreshSuccess = await _refreshToken();
+      if (refreshSuccess) {
+        // Retry the original request with the new token
+        headers['Authorization'] = 'Bearer $accessToken';
+        response = await http.post(
+          uri,
+          body: json.encode(data),
+          headers: headers,
+        );
+      }
+    }
+
     _handleResponse(response); // Optional: Handle response status
     return response;
+  }
+
+  // Token refresh method
+  static Future<bool> _refreshToken() async {
+    final Uri refreshUri =
+        Uri.parse('https://sbrgroup.salesncrm.com/api/user/user/refreshToken');
+
+    // Define headers
+    final Map<String, String> headers = {
+      'Content-Type': 'application/json',
+      'No-Auth': 'True', // Custom header indicating no authentication required
+    };
+
+    // Ensure tokens are not null
+    if (accessToken == null || token == null) {
+      print('Access token or refresh token is null.');
+      return false;
+    }
+
+    // Define request body
+    final Map<String, dynamic> body = {
+      'accessToken': accessToken,
+      'token': token,
+    };
+
+    try {
+      final response = await http.post(
+        refreshUri,
+        headers: headers,
+        body: json.encode(body),
+      );
+
+      // Check if the response is successful
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+
+        // Update tokens
+        accessToken = responseData['accessToken'];
+        token = responseData['token'];
+
+        // Save the new tokens using SharedPreferences
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('accessToken', accessToken!);
+        await prefs.setString('token', token!);
+
+        return true;
+      } else {
+        // Handle token refresh failure
+        print('Token refresh failed with status: ${response.statusCode}');
+        return false;
+      }
+    } catch (error) {
+      // Handle any errors during the request
+      print('Error during token refresh: $error');
+      return false;
+    }
   }
 
   // GET request method
@@ -102,10 +181,23 @@ class ApiService {
       if (userId != null) 'userId': userId.toString(),
     };
 
-    final response = await http.get(
+    http.Response response = await http.get(
       uri,
       headers: headers,
     );
+
+    if (response.statusCode == 401) {
+      // Attempt to refresh the token
+      final refreshSuccess = await _refreshToken();
+      if (refreshSuccess) {
+        // Retry the original request with the new token
+        headers['Authorization'] = 'Bearer $accessToken';
+        response = await http.get(
+          uri,
+          headers: headers,
+        );
+      }
+    }
 
     _handleResponse(response); // Optional: Handle response status
     return response;
@@ -128,11 +220,25 @@ class ApiService {
       if (userId != null) 'userId': userId.toString(),
     };
 
-    final response = await http.put(
+    http.Response response = await http.put(
       uri,
       body: json.encode(data),
       headers: headers,
     );
+
+    if (response.statusCode == 401) {
+      // Attempt to refresh the token
+      final refreshSuccess = await _refreshToken();
+      if (refreshSuccess) {
+        // Retry the original request with the new token
+        headers['Authorization'] = 'Bearer $accessToken';
+        response = await http.put(
+          uri,
+          body: json.encode(data),
+          headers: headers,
+        );
+      }
+    }
 
     _handleResponse(response); // Optional: Handle response status
     return response;
@@ -1017,18 +1123,98 @@ class ApiService {
   }
 
   static Future<http.Response> fetchOtReport({
-    required String projectName,
-    required String roleName,
+    required String projectId,
+    required String roleId,
     required String firstName,
     required String range,
+    required int? organizationId,
   }) async {
     return await getRequest(baseUrl2,
-        'api/facility-management/employeeOT/employee/getall?projectName=$projectName&roleName=$roleName&firstName=$firstName&range=$range');
+        'api/facility-management/employeeOT/employee/getall?toLocation=&projectId=$projectId&organizationId=$organizationId&roleId=$roleId&firstName=$firstName&range=$range');
   }
 
   static Future<http.Response> fetchOtReportProjectWise(
       int organizationId, String selectedDateRange) async {
     return await getRequest(baseUrl2,
-        'api/facility-management/employeeOT/employee/otcount?projectId=&organizationId=$organizationId&range=$selectedDateRange');
+        'api/facility-management/employeeOT/employee/otcount?toLocation=&projectId=&organizationId=$organizationId&range=$selectedDateRange');
+  }
+
+  static Future<http.Response> fetchRolesInOT(
+      int? organizationId, String selectedLocation) async {
+    return await getRequest(baseUrl2,
+        'api/hrm/employee/getrolebasedonproject?organizationId=$organizationId&locationId=$selectedLocation');
+  }
+
+  static Future<http.Response> fetchProjectsInOtScreen(int? orgId) async {
+    return await getRequest(
+        baseUrl2, 'api/project/project/findAll?name=&organizationId=$orgId');
+  }
+
+  static Future<http.Response> submitFoTransactionData(
+      String qrTransactionData, File imageFile) async {
+    final url =
+        Uri.parse('${baseUrl2}api/facility-management/fieldOfficerPatrol/save');
+
+    var request = http.MultipartRequest('POST', url);
+
+    request.fields['fieldOfficerPatrolBean'] = qrTransactionData;
+
+    if (imageFile != null && await imageFile.exists()) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'imageFile',
+          imageFile.path,
+          contentType: MediaType(
+            'image',
+            path.extension(imageFile.path).replaceFirst('.', ''),
+          ),
+        ),
+      );
+    }
+
+    request.headers['Authorization'] = 'Bearer $accessToken';
+
+    try {
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      return response;
+    } catch (e) {
+      throw Exception('Error during upload: $e');
+    }
+  }
+
+  static Future<http.Response> fetchFieldOfficerPatrolReports(
+    int organizationId,
+    String projectId,
+    String selectedDateRange,
+    int page,
+    int pageSize,
+    String searchQuery,
+  ) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/fieldOfficerPatrol/getallfiledofficepatrol?organizationId=$organizationId&projectId=$projectId&rangeOfDays=$selectedDateRange&page=$page&size=$pageSize&userName=$searchQuery');
+  }
+
+  static Future<http.Response> FodownloadImage({
+    required String projectName,
+    required String date,
+    required String userName,
+    required String phoneNumber,
+    required String imageUrl,
+  }) async {
+    // Encode each query parameter to ensure proper URL formatting
+    String encodedProjectName = Uri.encodeComponent(projectName);
+    String encodedDate = Uri.encodeComponent(date);
+    String encodedUserName = Uri.encodeComponent(userName);
+    String encodedPhoneNumber = Uri.encodeComponent(phoneNumber);
+    String encodedImageUrl = Uri.encodeComponent(imageUrl);
+
+    // Use encoded values in the endpoint URL
+    String endpoint =
+        'api/facility-management/fieldOfficerPatrol/get-fieldofficer-image?projectName=$encodedProjectName&date=$encodedDate&userName=$encodedUserName&phoneNumber=$encodedPhoneNumber&imageUrl=$encodedImageUrl';
+
+    // Make the HTTP request
+    return await getRequest(baseUrl1, endpoint); // Use getRequest
   }
 }

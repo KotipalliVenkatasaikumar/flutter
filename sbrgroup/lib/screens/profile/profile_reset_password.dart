@@ -47,10 +47,7 @@ class _ProfileResetPasswordScreenState
       final password = _passwordController.text;
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? email = prefs.getString('email');
-      // final response = await http.get(
-      //   Uri.parse(
-      //       'http://15.207.212.144:9000/api/user/updatepassword/$email/$password'),
-      // );
+     
       final response = await ApiService.updatePassword(email!, password);
       if (response.statusCode == 200) {
         logger.d('Password update successful');

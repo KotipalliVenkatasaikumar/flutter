@@ -64,7 +64,7 @@ class _RaiseIssueState extends State<RaiseIssue> {
   Future<void> fetchIssueTypes() async {
     try {
       final response = await http.get(Uri.parse(
-          'http://15.207.212.144:9000/api/user/commonreferencedetails/types/Issue_Type'));
+          'https://sbrgroup.salesncrm.com/api/user/commonreferencedetails/types/Issue_Type'));
       if (response.statusCode == 200) {
         setState(() {
           issuesTypeData = json.decode(response.body);
@@ -83,7 +83,7 @@ class _RaiseIssueState extends State<RaiseIssue> {
   Future<void> fetchSubIssueTypes(String commonRefValue) async {
     try {
       final response = await http.get(Uri.parse(
-          'http://15.207.212.144:9000/api/user/commonreferencedetails/types/$commonRefValue'));
+          'https://sbrgroup.salesncrm.com/api/user/commonreferencedetails/types/$commonRefValue'));
       if (response.statusCode == 200) {
         setState(() {
           issuesSubTypeData = json.decode(response.body);

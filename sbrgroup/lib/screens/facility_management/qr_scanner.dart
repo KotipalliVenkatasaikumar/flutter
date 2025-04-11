@@ -74,6 +74,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     bool isConnected = await connectivityHandler.checkConnectivity(context);
     if (isConnected) {
       // Proceed with other initialization steps if connected
+      _initializeLocation();
       _checkForUpdate();
       initializeData();
     }
@@ -82,6 +83,23 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   Future<void> initializeData() async {
     roleId = await Util.getRoleId();
     userId = await Util.getUserId();
+  }
+
+  Future<void> _initializeLocation() async {
+    try {
+      Position position = await _getCurrentPosition(context);
+      setState(() {
+        currentLatitude = position.latitude;
+        currentLongitude = position.longitude;
+      });
+    } catch (e) {
+      print('Error fetching location: $e');
+
+      if (mounted) {
+        errorMessage =
+            'Failed to fetch location. Please check GPS and try again.';
+      }
+    }
   }
 
   Future<void> _checkForUpdate() async {
@@ -128,9 +146,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         });
 
         return; // Early exit due to session expiration
-      }
-
-      if (response.statusCode == 200) {
+      } else if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;
@@ -535,9 +551,22 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         return;
       }
 
-      Position position = await _getCurrentPosition(context);
-      currentLatitude = position.latitude;
-      currentLongitude = position.longitude;
+      // Position position = await _getCurrentPosition(context);
+      // currentLatitude = position.latitude;
+      // currentLongitude = position.longitude;
+
+      Position position;
+      try {
+        position = await _getCurrentPosition(context);
+      } catch (e) {
+        errorMessage = 'Failed to get current location. Please enable GPS.';
+        return;
+      }
+
+      setState(() {
+        currentLatitude = position.latitude;
+        currentLongitude = position.longitude;
+      });
 
       distance = _calculateHaversineDistance(
         currentLatitude,
@@ -636,7 +665,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
     try {
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        desiredAccuracy: LocationAccuracy.best,
+        timeLimit: const Duration(seconds: 5),
       );
       return position;
     } catch (e) {

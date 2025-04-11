@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
+import 'package:ajna/screens/facility_management/ot_report.dart';
 import 'package:ajna/screens/facility_management/schedule_with_report.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -22,16 +23,19 @@ import 'custom_date_picker.dart'; // Import the new LocationsScreen
 class Project {
   final String projectName;
   final int? otCount;
+  final int projectId;
 
   Project({
     required this.projectName,
-    required this.otCount,
+    this.otCount,
+    required this.projectId,
   });
 
   factory Project.fromJson(Map<String, dynamic> json) {
     return Project(
       projectName: json['projectName'],
       otCount: json['otCount'],
+      projectId: json['projectId'],
     );
   }
 
@@ -39,6 +43,7 @@ class Project {
     return {
       'projectName': projectName,
       'otCount': otCount,
+      'projectId': projectId,
     };
   }
 }
@@ -135,12 +140,10 @@ class _OtReportProjectWiseState extends State<OtReportProjectWise> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ScheduleReportsScreen(
-          organizationId: intOrganizationId!,
+        builder: (context) => OtReportScreen(
           projectId: projectId,
           selectedDateRange: selectedDateRange,
           projectName: projectName,
-          // qrgeneratorId: 0,
         ),
       ),
     );
@@ -228,9 +231,7 @@ class _OtReportProjectWiseState extends State<OtReportProjectWise> {
         });
 
         return; // Early exit due to session expiration
-      }
-
-      if (response.statusCode == 200) {
+      } else if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;
@@ -458,71 +459,93 @@ class _OtReportProjectWiseState extends State<OtReportProjectWise> {
                           final project = projects[index];
                           return GestureDetector(
                             onTap: () {
-                              // fetchReportAndSchedule(
-                              //     project.projectId, project.projectName);
+                              fetchReportAndSchedule(
+                                  project.projectId, project.projectName);
                             },
                             child: Padding(
-                              padding: const EdgeInsets.all(10.0),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(10.0),
-                                ),
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          'Project: ',
-                                          style: TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(width: 4.0),
-                                        Expanded(
-                                          child: Text(
-                                            project.projectName,
-                                            style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 14),
-                                            softWrap: true,
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 2,
-                                          ),
-                                        ),
-                                      ],
+                                padding: const EdgeInsets.all(10.0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color.fromARGB(255, 240, 240,
+                                        240), // Light gray background
+                                    borderRadius: BorderRadius.circular(10.0),
+                                    border: Border.all(
+                                      color: const Color.fromARGB(255, 200, 200,
+                                          200), // Subtle border color
+                                      width: 1.0,
                                     ),
-                                    const SizedBox(height: 8.0),
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          'OT Count: ',
-                                          style: TextStyle(
+                                  ),
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Text(
+                                            'Project: ',
+                                            style: TextStyle(
                                               color: Colors.black,
                                               fontSize: 14,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(width: 4.0),
-                                        Text(
-                                          (project.otCount?.toString() ??
-                                              '0'), // If otCount is null, display '0'
-                                          style: const TextStyle(
-                                            color: Color.fromARGB(
-                                                255, 255, 255, 255),
-                                            fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
                                           ),
-                                        )
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                                          const SizedBox(width: 4.0),
+                                          Expanded(
+                                            child: Text(
+                                              project.projectName,
+                                              style: const TextStyle(
+                                                color: Colors
+                                                    .black87, // Darker text color for better contrast
+                                                fontSize: 14,
+                                              ),
+                                              softWrap: true,
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 2,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8.0),
+                                      Row(
+                                        children: [
+                                          const Text(
+                                            'OT Count: ',
+                                            style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4.0),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8.0, vertical: 4.0),
+                                            decoration: BoxDecoration(
+                                              color: const Color.fromARGB(
+                                                  255,
+                                                  76,
+                                                  175,
+                                                  80), // Green background for OT count
+                                              borderRadius:
+                                                  BorderRadius.circular(8.0),
+                                            ),
+                                            child: Text(
+                                              project.otCount?.toString() ??
+                                                  '0', // Default to '0' if null
+                                              style: const TextStyle(
+                                                color: Colors
+                                                    .white, // White text for contrast
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                )),
                           );
                         },
                       ),

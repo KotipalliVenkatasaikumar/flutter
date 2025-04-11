@@ -43,8 +43,7 @@ class _PresalesPageState extends State<PresalesPage> {
   }
 
   Future<void> fetchDateRangeOptions() async {
-    // final url =
-    //     'http://15.207.212.144:9000/api/user/commonreferencedetails/types/Filter_Days';
+   
     try {
       //final response = await http.get(Uri.parse(url));
 
@@ -89,9 +88,7 @@ class _PresalesPageState extends State<PresalesPage> {
   }
 
   Future<void> fetchDashboardData(String range, int userId, int roleId) async {
-    // final url =
-    //     'http://15.207.212.144:9003/api/lead/lead/dashboard/leads?userId=$userId&roleId=$roleId&range=$range';
-
+   
     try {
       //final response = await http.get(Uri.parse(url));
       final response =
@@ -137,9 +134,7 @@ class _PresalesPageState extends State<PresalesPage> {
   }
 
   Future<void> fetchFollowUpData(String range, int userId, int roleId) async {
-    // final url =
-    //     'http://15.207.212.144:9003/api/lead/followup/dashboard/followups?userId=$userId&roleId=$roleId&range=$range';
-
+    
     // Show loading indicator
     setState(() {
       isLoading = true;

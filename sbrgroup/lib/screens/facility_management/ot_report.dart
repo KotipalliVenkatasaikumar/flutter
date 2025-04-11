@@ -86,8 +86,59 @@ class EmployeeShift {
   }
 }
 
+class Project {
+  final int projectId;
+  final String projectName;
+
+  Project({
+    required this.projectId,
+    required this.projectName,
+  });
+
+  // From JSON
+  factory Project.fromJson(Map<String, dynamic> json) {
+    return Project(
+      projectId: json['projectId'],
+      projectName: json['projectName'],
+    );
+  }
+
+  // To JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'projectId': projectId,
+      'projectName': projectName,
+    };
+  }
+}
+
+class Role {
+  final int roleId;
+  final String roleName;
+
+  Role({
+    required this.roleId,
+    required this.roleName,
+  });
+
+  factory Role.fromJson(Map<String, dynamic> json) {
+    return Role(
+      roleId: json['roleId'] ?? 0,
+      roleName: json['roleName'] ?? 'Unknown',
+    );
+  }
+}
+
 class OtReportScreen extends StatefulWidget {
-  const OtReportScreen({super.key});
+  final int projectId;
+  final String selectedDateRange;
+  final String projectName;
+
+  OtReportScreen({
+    required this.projectId,
+    required this.selectedDateRange,
+    required this.projectName,
+  });
   @override
   _OtReportScreenState createState() => _OtReportScreenState();
 }
@@ -112,21 +163,27 @@ class _OtReportScreenState extends State<OtReportScreen> {
   int? intRoleId;
   bool _isExpanded = false;
   // String _selectedRange = 'Custom';
-  String selectedProjectId = '0';
+  String selectedProjectId = '';
+  String selectedRoleId = '';
   String selectedVendorId = '0';
   String roleSearchQuery = '';
   String projectSearchQuery = '';
   String nameSearchQuery = '';
-  String selectedDateRange = '0';
+  String selectedDateRange = '';
   bool isLoading = true;
 
   String prjectName = '';
   String venderName = '';
 
+  List<Project> projects = [];
+  List<Role> roles = [];
+
   @override
   void initState() {
     super.initState();
     _checkConnectivity();
+    selectedProjectId = widget.projectId?.toString() ?? '';
+    selectedDateRange = widget.selectedDateRange;
   }
 
   Future<void> _checkConnectivity() async {
@@ -143,8 +200,39 @@ class _OtReportScreenState extends State<OtReportScreen> {
     intRoleId = await Util.getRoleId();
     userId = await Util.getUserId();
     accessToken = await Util.getAccessToken();
+    fetchProjectData(intOraganizationId);
     fetchOtReport();
+    fetchRoles();
     // _scrollListener();
+  }
+
+  Future<List<Project>> fetchProjectData(int? orgId) async {
+    try {
+      // Fetch the response from the API
+      final response = await ApiService.fetchProjectsInOtScreen(orgId!);
+
+      // Print the status code and response body for debugging
+      print('Response Status Code: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+
+      // Check if the response is successful
+      if (response.statusCode == 200) {
+        // Parse the JSON response into a List of Project objects
+        final List<dynamic> data = json.decode(response.body);
+
+        // Convert the List<dynamic> into a List of Project objects
+        projects = data.map((item) => Project.fromJson(item)).toList();
+
+        return projects;
+      } else {
+        // Handle errors (non-200 status code)
+        throw Exception('Failed to load project data');
+      }
+    } catch (e) {
+      // Print any error that occurs during the fetch process
+      print('Error fetching project data: $e');
+      rethrow; // Optionally, rethrow the error to handle it elsewhere
+    }
   }
 
   Future<void> fetchOtReport({bool isLoadingMore = false}) async {
@@ -155,10 +243,11 @@ class _OtReportScreenState extends State<OtReportScreen> {
       });
 
       final response = await ApiService.fetchOtReport(
-        projectName: projectSearchQuery ?? '',
-        roleName: roleSearchQuery ?? '',
+        projectId: selectedProjectId ?? '',
+        roleId: selectedRoleId ?? '',
         firstName: nameSearchQuery ?? '',
         range: selectedDateRange,
+        organizationId: intOraganizationId,
       );
 
       if (response.statusCode == 200) {
@@ -200,6 +289,28 @@ class _OtReportScreenState extends State<OtReportScreen> {
       setState(() {
         isLoading = false;
       });
+    }
+  }
+
+  Future<void> fetchRoles() async {
+    try {
+      final response = await ApiService.fetchOrgRoles(
+        intOraganizationId!,
+      );
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        setState(() {
+          roles = jsonData.map<Role>((json) => Role.fromJson(json)).toList();
+        });
+      } else {
+        throw Exception('Failed to load roles');
+      }
+    } catch (error) {
+      ErrorHandler.handleError(
+        context,
+        'Failed to load roles data.',
+        'Location data error: $error',
+      );
     }
   }
 
@@ -303,9 +414,7 @@ class _OtReportScreenState extends State<OtReportScreen> {
         });
 
         return; // Early exit due to session expiration
-      }
-
-      if (response.statusCode == 200) {
+      } else if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;
@@ -530,10 +639,8 @@ class _OtReportScreenState extends State<OtReportScreen> {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12.0),
                                   border: Border.all(
-                                    color: Color.fromRGBO(8, 101, 145,
-                                        1), // Border color applied here
-                                    width:
-                                        1.0, // Border width, adjust as needed
+                                    color: Color.fromRGBO(8, 101, 145, 1),
+                                    width: 1.0,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
@@ -544,22 +651,55 @@ class _OtReportScreenState extends State<OtReportScreen> {
                                     ),
                                   ],
                                 ),
-                                child: TextField(
-                                  controller: _projrctName,
+                                child: DropdownButtonFormField2<String>(
                                   decoration: const InputDecoration(
-                                    hintText: 'Project Name',
+                                    contentPadding:
+                                        EdgeInsets.symmetric(horizontal: 16.0),
                                     border: InputBorder.none,
-                                    hintStyle: TextStyle(fontSize: 14),
-                                    prefixIcon: Icon(Icons.search,
-                                        color: Color.fromRGBO(6, 73, 105, 1)),
                                   ),
+                                  value: projects.any((project) =>
+                                          project.projectId.toString() ==
+                                          selectedProjectId)
+                                      ? selectedProjectId
+                                      : null, // Use null if no match is found
+                                  hint: const Text('Project Name'),
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: '',
+                                      child: const Text('All'),
+                                    ),
+                                    ...projects.map((project) {
+                                      return DropdownMenuItem<String>(
+                                        value: project.projectId.toString(),
+                                        child: Text(project.projectName),
+                                      );
+                                    }).toList(),
+                                  ],
                                   onChanged: (value) {
                                     setState(() {
-                                      projectSearchQuery = value;
-
-                                      fetchOtReport();
+                                      selectedProjectId = value ??
+                                          ''; // Safely handle null values
                                     });
+                                    fetchOtReport(); // Fetch data based on the current selection
+                                    // fetchRoles();
                                   },
+                                  isExpanded: true,
+                                  dropdownStyleData: DropdownStyleData(
+                                    maxHeight: 250,
+                                    width:
+                                        MediaQuery.of(context).size.width * 0.9,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      color: Colors.white,
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Colors.black12,
+                                          blurRadius: 8,
+                                          offset: Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -577,10 +717,8 @@ class _OtReportScreenState extends State<OtReportScreen> {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12.0),
                                   border: Border.all(
-                                    color: Color.fromRGBO(8, 101, 145,
-                                        1), // Border color applied here
-                                    width:
-                                        1.0, // Border width, adjust as needed
+                                    color: Color.fromRGBO(8, 101, 145, 1),
+                                    width: 1.0,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
@@ -591,22 +729,54 @@ class _OtReportScreenState extends State<OtReportScreen> {
                                     ),
                                   ],
                                 ),
-                                child: TextField(
-                                  controller: _roleName,
+                                child: DropdownButtonFormField2<String>(
                                   decoration: const InputDecoration(
-                                    hintText: 'Role Name',
+                                    contentPadding:
+                                        EdgeInsets.symmetric(horizontal: 16.0),
                                     border: InputBorder.none,
-                                    hintStyle: TextStyle(fontSize: 14),
-                                    prefixIcon: Icon(Icons.search,
-                                        color: Color.fromRGBO(6, 73, 105, 1)),
                                   ),
+                                  value: roles.any((role) =>
+                                          role.roleId.toString() ==
+                                          selectedRoleId)
+                                      ? selectedRoleId
+                                      : null, // Use null if no match is found
+                                  hint: const Text('Role Name'),
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: '',
+                                      child: const Text('All'),
+                                    ),
+                                    ...roles.map((role) {
+                                      return DropdownMenuItem<String>(
+                                        value: role.roleId.toString(),
+                                        child: Text(role.roleName),
+                                      );
+                                    }).toList(),
+                                  ],
                                   onChanged: (value) {
                                     setState(() {
-                                      roleSearchQuery = value;
-
-                                      fetchOtReport();
+                                      selectedRoleId = value ??
+                                          ''; // Safely handle null values
                                     });
+                                    fetchOtReport(); // Fetch data based on the current selection
                                   },
+                                  isExpanded: true,
+                                  dropdownStyleData: DropdownStyleData(
+                                    maxHeight: 250,
+                                    width:
+                                        MediaQuery.of(context).size.width * 0.9,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      color: Colors.white,
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Colors.black12,
+                                          blurRadius: 8,
+                                          offset: Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
