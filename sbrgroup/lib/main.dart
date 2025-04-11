@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/facility_management/reports_projects.dart';
 import 'package:ajna/screens/sqflite/database_helper.dart';
@@ -24,25 +23,16 @@ import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/profile/forgot_password.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'screens/notification/notification_service.dart';
-
-// const String taskName = "dailyApiTask";
-// const int targetHour = 11; // Set to 11 AM
-// const int targetMinute = 10; // Set to 10 minutes past the hour
-// const int timeRange =
-//     5; // Allowable time range in minutes (e.g., between 11:10 AM and 11:15 AM)
 
 // Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // await Firebase.initializeApp();
-  // await NotificationService.instance.initialize();
 
-  // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   // NotificationService().initialize(navigatorKey);
 
   runApp(const MyApp());
@@ -168,7 +158,52 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _checkForUpdate() async {
     try {
       final response = await ApiService.checkForUpdate();
-      if (response.statusCode == 200) {
+
+      if (response.statusCode == 401) {
+        // Clear preferences and show session expired dialog
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // Show session expired dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false, // Prevent dismissing dialog without action
+          builder: (context) => AlertDialog(
+            title: const Text('Session Expired'),
+            content: const Text(
+                'Your session has expired. Please log in again to continue.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close the dialog
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginPage(), // Login Page
+                    ),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+
+        // Automatically navigate to login after 5 seconds if no action
+        Future.delayed(const Duration(seconds: 5), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context); // Close dialog if still open
+          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const LoginPage(), // Login Page
+            ),
+          );
+        });
+
+        return; // Early return since session expired
+      } else if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;
@@ -185,17 +220,17 @@ class _LoginPageState extends State<LoginPage> {
               _isUpdateAvailable = true;
             });
 
-            bool isDeleted = await Util.deleteDeviceTokenInDatabase();
+            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
 
-            if (isDeleted) {
-              print("Logout successful, device token deleted.");
-            } else {
-              print("Logout successful, but failed to delete device token.");
-            }
+            // if (isDeleted) {
+            //   print("Logout successful, device token deleted.");
+            // } else {
+            //   print("Logout successful, but failed to delete device token.");
+            // }
 
-            // Clear user session data
-            SharedPreferences prefs = await SharedPreferences.getInstance();
-            await prefs.clear();
+            // // Clear user session data
+            // SharedPreferences prefs = await SharedPreferences.getInstance();
+            // await prefs.clear();
 
             // Show update dialog
             _showUpdateDialog(_apkUrl);
@@ -253,11 +288,11 @@ class _LoginPageState extends State<LoginPage> {
             .then((result) {
           print('Install result: $result');
           // After installation, navigate back to the login page
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginPage()),
-            (Route<dynamic> route) => false,
-          );
+          // Navigator.pushAndRemoveUntil(
+          //   context,
+          //   MaterialPageRoute(builder: (context) => const LoginPage()),
+          //   (Route<dynamic> route) => false,
+          // );
         }).catchError((error) {
           print('Install error: $error');
         });

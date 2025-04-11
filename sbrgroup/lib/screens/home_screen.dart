@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:ajna/screens/connectivity_handler.dart';
+import 'package:ajna/screens/facility_management/fo_report.dart';
 import 'package:ajna/screens/facility_management/ot_project_wise_report.dart';
 import 'package:ajna/screens/facility_management/ot_report.dart';
 import 'package:ajna/screens/facility_management/ot_screen.dart';
 import 'package:ajna/screens/facility_management/schedule_with_report.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
+import 'package:ajna/screens/student/MathTablesTestScreen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -22,7 +24,7 @@ import 'package:ajna/screens/app_bar.dart';
 import 'package:ajna/screens/crm/crm_home_screen.dart';
 import 'package:ajna/screens/crm/raise-issue.dart';
 import 'package:ajna/screens/attendace/attendace_report.dart';
-import 'package:ajna/screens/attendace/attendance.dart';
+import 'package:ajna/screens/attendace/fo_attendance.dart';
 import 'package:ajna/screens/facility_management/customer_consumption.dart';
 import 'package:ajna/screens/facility_management/qr_generator.dart';
 import 'package:ajna/screens/facility_management/qr_schedule.dart';
@@ -60,6 +62,7 @@ class IconButtonWidget extends StatelessWidget {
   final Function() onTap;
   final Color iconColor;
   final Color backgroundColor;
+  final double textSize; // New parameter for dynamic text size
 
   const IconButtonWidget({
     Key? key,
@@ -69,6 +72,7 @@ class IconButtonWidget extends StatelessWidget {
     required this.onTap,
     this.iconColor = Colors.black,
     this.backgroundColor = Colors.white,
+    this.textSize = 12.0, // Default text size
   })  : assert(imagePath != null || icon != null,
             'Either imagePath or icon must be provided'),
         super(key: key);
@@ -87,14 +91,13 @@ class IconButtonWidget extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: imagePath != null
-                ? Image.asset(imagePath!,
-                    width: 50, height: 50) // Ensure this path is correct
+                ? Image.asset(imagePath!, width: 50, height: 50)
                 : Icon(icon, size: 25, color: iconColor),
           ),
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(fontSize: 12), // Adjust font size here
+            style: TextStyle(fontSize: textSize), // Use dynamic text size
           ),
         ],
       ),
@@ -121,13 +124,14 @@ class _HomeScreenState extends State<HomeScreen> {
     'CRM',
     'Raise Issue',
     'Add Lead',
-    'Attendance',
+    'FO Visit',
     'Account Entry',
     'Attendance Report',
     'Schedule Report',
     'Stored Data',
     'OT',
     'OT Report',
+    'Math Quiz',
   };
 
   final List<Map<String, dynamic>> predefinedIcons = [
@@ -138,20 +142,20 @@ class _HomeScreenState extends State<HomeScreen> {
       'label': 'QR Generator',
       'onTap': () => const QrGeneratorScreen(),
     },
-    {
-      //'icon': Icons.business_center,
-      'icon': null,
-      'imagePath': 'lib/assets/images/sales.png',
-      'label': 'Sales',
-      'onTap': () => PresalesPage(),
-    },
-    {
-      //'icon': Icons.visibility,
-      'icon': null,
-      'imagePath': 'lib/assets/images/site_visit.png',
-      'label': 'Site Visit Form',
-      'onTap': () => SiteVisitForm(),
-    },
+    // {
+    //   //'icon': Icons.business_center,
+    //   'icon': null,
+    //   'imagePath': 'lib/assets/images/sales.png',
+    //   'label': 'Sales',
+    //   'onTap': () => PresalesPage(),
+    // },
+    // {
+    //   //'icon': Icons.visibility,
+    //   'icon': null,
+    //   'imagePath': 'lib/assets/images/site_visit.png',
+    //   'label': 'Site Visit Form',
+    //   'onTap': () => SiteVisitForm(),
+    // },
     {
       //'icon': Icons.app_registration,
       'icon': null,
@@ -215,27 +219,27 @@ class _HomeScreenState extends State<HomeScreen> {
       'label': 'Raise Issue',
       'onTap': () => RaiseIssue(),
     },
-    {
-      //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/lead.png',
-      'label': 'Add Lead',
-      'onTap': () => AddLeadScreen(),
-    },
+    // {
+    //   //'icon': Icons.bar_chart,
+    //   'icon': null,
+    //   'imagePath': 'lib/assets/images/lead.png',
+    //   'label': 'Add Lead',
+    //   'onTap': () => AddLeadScreen(),
+    // },
     {
       //'icon': Icons.bar_chart,
       'icon': null,
       'imagePath': 'lib/assets/images/attendace.png',
-      'label': 'Attendance',
+      'label': 'FO Visit',
       'onTap': () => const AttendanceScreen(),
     },
-    {
-      //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/account.png',
-      'label': 'Account Entry',
-      'onTap': () => TransactionHistoryScreen(),
-    },
+    // {
+    //   //'icon': Icons.bar_chart,
+    //   'icon': null,
+    //   'imagePath': 'lib/assets/images/account.png',
+    //   'label': 'Account Entry',
+    //   'onTap': () => TransactionHistoryScreen(),
+    // },
     {
       //'icon': Icons.bar_chart,
       'icon': null,
@@ -270,6 +274,24 @@ class _HomeScreenState extends State<HomeScreen> {
       'imagePath': 'lib/assets/images/otreport.png',
       'label': 'OT Report',
       'onTap': () => OtReportProjectWise(),
+      // 'onTap': () => OtReportScreen(),
+    },
+    {
+      //'icon': Icons.construction,
+      'icon': null,
+      'imagePath': 'lib/assets/images/student.png',
+      'label': 'Math Quiz',
+      'onTap': () => MathTablesTestScreen(),
+      // 'onTap': () => OtReportScreen(),
+    },
+
+    {
+      //'icon': Icons.construction,
+      'icon': null,
+      'imagePath': 'lib/assets/images/fo_report.png',
+      'label': 'Fo Report',
+      'onTap': () => FoReportsScreen(),
+      // 'onTap': () => OtReportScreen(),
     },
   ];
 
@@ -284,6 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _deviceToken;
   int? userId;
   int? organizationId;
+  int? roleId;
 
   @override
   void initState() {
@@ -309,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
     androidId = await Util.getUserAndroidId();
     userId = await Util.getUserId();
     organizationId = await Util.getOrganizationId();
-
+    roleId = await Util.getRoleId();
     List<String>? iconLabels = await Util.getIconsAndLabels();
     List<Map<String, dynamic>> matchedIcons = [];
 
@@ -327,6 +350,44 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     // fetchHeadline();
+  }
+
+  static Future<void> _fetchAdditionalData(int roleId) async {
+    try {
+      final response = await ApiService.fetchAdditionalData(roleId);
+      if (response.statusCode == 200) {
+        var additionalData = json.decode(response.body);
+        print('Decoded additionalData: $additionalData');
+
+        if (additionalData is List<dynamic>) {
+          List<String>? iconsAndLabels = additionalData.cast<String>();
+          if (iconsAndLabels != null) {
+            await Util.saveIconsAndLabels(iconsAndLabels);
+            print('Saved Icons and Labels: $iconsAndLabels');
+          } else {
+            print('Failed to cast additional data to List<String>.');
+          }
+        } else {
+          print(
+              'Additional data is not in the expected format: ${additionalData.runtimeType}');
+        }
+      } else {
+        print(
+            'Failed to fetch additional data. Status code: ${response.statusCode}');
+        print('Response body: ${response.body}');
+
+        if (response.statusCode == 403) {
+          print(
+              '403 Forbidden: Access denied. Check your permissions or token.');
+        } else if (response.statusCode == 401) {
+          print('401 Unauthorized: Invalid or expired token.');
+        } else {
+          print('Unhandled status code: ${response.statusCode}');
+        }
+      }
+    } catch (e) {
+      print('Error fetching additional data: $e');
+    }
   }
 
   Future<void> _initializeFirebaseMessaging() async {
@@ -483,9 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
 
         return; // Early exit due to session expiration
-      }
-
-      if (response.statusCode == 200) {
+      } else if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;
@@ -607,6 +666,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshData() async {
     await _initializeData();
+    await _fetchAdditionalData(roleId!);
     _checkForUpdate();
   }
 
@@ -791,34 +851,78 @@ class _HomeScreenState extends State<HomeScreen> {
               //     ),
               //   ),
               // ),
+
+              // Expanded(
+              //   child: Container(
+              //     padding: const EdgeInsets.all(16.0),
+              //     child: _iconDetails == null
+              //         ? const CircularProgressIndicator()
+              //         : GridView.count(
+              //             shrinkWrap: true,
+              //             crossAxisCount: 3,
+              //             crossAxisSpacing: 10.0,
+              //             mainAxisSpacing: 10.0,
+              //             children: _iconDetails!.map((iconDetail) {
+              //               return IconButtonWidget(
+              //                 icon: iconDetail['icon'],
+              //                 imagePath: iconDetail['imagePath'],
+              //                 label: iconDetail['label'],
+              //                 iconColor: Colors.white,
+              //                 backgroundColor:
+              //                     const Color.fromRGBO(255, 255, 255, 255),
+              //                 onTap: () {
+              //                   Navigator.push(
+              //                     context,
+              //                     MaterialPageRoute(
+              //                       builder: (context) => iconDetail['onTap'](),
+              //                     ),
+              //                   );
+              //                 },
+              //               );
+              //             }).toList(),
+              //           ),
+              //   ),
+              // ),
+
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(16.0),
                   child: _iconDetails == null
-                      ? const CircularProgressIndicator()
-                      : GridView.count(
-                          shrinkWrap: true,
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 10.0,
-                          mainAxisSpacing: 10.0,
-                          children: _iconDetails!.map((iconDetail) {
-                            return IconButtonWidget(
-                              icon: iconDetail['icon'],
-                              imagePath: iconDetail['imagePath'],
-                              label: iconDetail['label'],
-                              iconColor: Colors.white,
-                              backgroundColor:
-                                  const Color.fromRGBO(255, 255, 255, 255),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => iconDetail['onTap'](),
-                                  ),
+                      ? const Center(child: CircularProgressIndicator())
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            double screenWidth = constraints.maxWidth;
+                            double textSize = screenWidth < 400
+                                ? 10.0
+                                : 14.0; // Adjust text size
+
+                            return GridView.count(
+                              shrinkWrap: true,
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 10.0,
+                              mainAxisSpacing: 10.0,
+                              children: _iconDetails!.map((iconDetail) {
+                                return IconButtonWidget(
+                                  icon: iconDetail['icon'],
+                                  imagePath: iconDetail['imagePath'],
+                                  label: iconDetail['label'],
+                                  iconColor: Colors.white,
+                                  backgroundColor:
+                                      const Color.fromRGBO(255, 255, 255, 255),
+                                  textSize: textSize, // Pass dynamic text size
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            iconDetail['onTap'](),
+                                      ),
+                                    );
+                                  },
                                 );
-                              },
+                              }).toList(),
                             );
-                          }).toList(),
+                          },
                         ),
                 ),
               ),

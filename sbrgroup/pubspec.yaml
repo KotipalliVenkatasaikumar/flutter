@@ -4,7 +4,7 @@ description: "A new Flutter project."
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.1.0
+version: 1.1.6
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -62,6 +62,8 @@ dependencies:
   multi_select_flutter: ^4.0.0
   fading_edge_scrollview: 3.0.0
   animated_text_kit: ^4.2.1
+  flutter_tts: ^4.2.1
+  confetti: ^0.7.0
   
   
 dev_dependencies:
@@ -98,5 +100,9 @@ flutter:
     - lib/assets/images/corenuts-logo.png
     - lib/assets/images/ot.png
     - lib/assets/images/otreport.png
+    - lib/assets/images/cloud.png
+    - lib/assets/images/child_playing.png
+    - lib/assets/images/student.png
+    - lib/assets/images/fo_report.png
     - lib/assets/
   

@@ -17,15 +17,16 @@ import 'package:ajna/screens/error_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'success_screen.dart';
 
-class SelfieCaptureScreen extends StatefulWidget {
+class FoSelfieCaptureScreen extends StatefulWidget {
   final Map<String, dynamic> scannedData;
-  SelfieCaptureScreen({required this.scannedData});
+  final bool isLoggedIn;
+  FoSelfieCaptureScreen({required this.scannedData, required this.isLoggedIn});
 
   @override
-  _SelfieCaptureScreenState createState() => _SelfieCaptureScreenState();
+  _FoSelfieCaptureScreenState createState() => _FoSelfieCaptureScreenState();
 }
 
-class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
+class _FoSelfieCaptureScreenState extends State<FoSelfieCaptureScreen> {
   final ConnectivityHandler connectivityHandler = ConnectivityHandler();
 
   File? _selfie;
@@ -181,9 +182,22 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
     try {
       final scannedDataJson = jsonEncode(widget.scannedData);
       final response =
-          await ApiService.submitQrTransactionData(scannedDataJson, _selfie!);
+          await ApiService.submitFoTransactionData(scannedDataJson, _selfie!);
 
       if (response.statusCode == 201) {
+        // Store response if isLoggedIn is true
+
+        Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        Map<String, dynamic> data = jsonResponse['data']; // Extract `data`
+
+        // Store entire data object in SharedPreferences
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        if (widget.isLoggedIn) {
+          await prefs.setString('qr_response', jsonEncode(data));
+        } else {
+          await prefs.remove('qr_response');
+        }
+
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => SuccessScreen()),
         );
@@ -213,6 +227,45 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
     }
   }
 
+  // void _submitData() async {
+  //   if (scannedQrData == null) return;
+
+  //   SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  //   // Clear stored QR response if isLoggedIn is false
+  //   if (!widget.isLoggedIn) {
+  //     await prefs.remove('qr_response');
+  //   }
+
+  //   try {
+  //     final response = await ApiService.sendAttendace(scannedQrData!);
+
+  //     if (response.statusCode == 200 || response.statusCode == 201) {
+  //       // Store response if isLoggedIn is true
+  //       if (widget.isLoggedIn) {
+  //         List<dynamic> jsonResponse = jsonDecode(response.body);
+  //         await prefs.setString('qr_response', jsonEncode(jsonResponse));
+  //       }
+
+  //       Navigator.of(context).pushReplacement(
+  //         MaterialPageRoute(builder: (context) => SuccessScreen()),
+  //       );
+  //     } else {
+  //       ErrorHandler.handleError(
+  //         context,
+  //         'Failed to submit data. Please try again later.',
+  //         'Error uploading selfie: ${response.statusCode}',
+  //       );
+  //     }
+  //   } catch (e) {
+  //     ErrorHandler.handleError(
+  //       context,
+  //       'Failed to submit data. Please try again later.',
+  //       'Error submitting data: $e',
+  //     );
+  //   }
+  // }
+
   void _disposeCamera() {
     if (_cameraController != null) {
       _cameraController!.dispose();
@@ -230,7 +283,6 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
   Future<void> _checkForUpdate() async {
     try {
       final response = await ApiService.checkForUpdate();
-
       if (response.statusCode == 401) {
         // Clear preferences and show session expired dialog
         SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -271,7 +323,9 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
         });
 
         return; // Early exit due to session expiration
-      } else if (response.statusCode == 200) {
+      }
+
+      if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;

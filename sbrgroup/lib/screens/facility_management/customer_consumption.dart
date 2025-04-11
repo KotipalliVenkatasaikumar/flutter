@@ -57,8 +57,7 @@ class _CustomerConsumptionScreenState extends State<CustomerConsumptionScreen> {
   }
 
   Future<void> fetchConsumptionTypeList() async {
-    // final response = await http.get(Uri.parse(
-    //     'http://15.207.212.144:9000/api/user/commonreferencedetails/types/Consumption_Type'));
+   
     final response = await ApiService.fetchConsumptionTypeList();
     if (response.statusCode == 200) {
       setState(() {
@@ -77,8 +76,7 @@ class _CustomerConsumptionScreenState extends State<CustomerConsumptionScreen> {
   }
 
   Future<void> fetchConsumptionYearList() async {
-    // final response = await http.get(Uri.parse(
-    //     'http://15.207.212.144:9000/api/user/commonreferencedetails/types/Consumption_Year'));
+    
     final response = await ApiService.fetchConsumptionYearList();
     if (response.statusCode == 200) {
       setState(() {
@@ -98,8 +96,7 @@ class _CustomerConsumptionScreenState extends State<CustomerConsumptionScreen> {
   }
 
   Future<void> loadCustomers() async {
-    // final response = await http.get(Uri.parse(
-    //     'http://15.207.212.144:9006/api/facility-management/customer/fetchall'));
+   
     final response = await ApiService.fetchloadCustomers();
     if (response.statusCode == 200) {
       setState(() {
@@ -128,13 +125,7 @@ class _CustomerConsumptionScreenState extends State<CustomerConsumptionScreen> {
 
       print('Data to be sent to API: $data'); // Print statement for debug
 
-      // final response = await http.post(
-      //   Uri.parse(
-      //       'http://15.207.212.144:9006/api/facility-management/consumption/save'),
-      //   headers: {'Content-Type': 'application/json'},
-      //   body: json.encode(data),
-      // );
-
+    
       final response = await ApiService.saveConsumptionData(data);
 
       if (response.statusCode == 201) {

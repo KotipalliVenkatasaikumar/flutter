@@ -75,9 +75,7 @@ class _ResetAndroidIdScreenState extends State<ResetAndroidIdScreen> {
   }
 
   Future<void> _fetchUsers(String organizationId) async {
-    // final response = await http.get(Uri.parse(
-    //     'http://15.207.212.144:9000/api/user/user/fetchall?organizationId=$organizationId'));
-
+   
     final response = await ApiService.fetchResetUsers(organizationId);
 
     if (response.statusCode == 200) {
@@ -101,14 +99,7 @@ class _ResetAndroidIdScreenState extends State<ResetAndroidIdScreen> {
   }
 
   Future<void> _resetAndroidId(int userId) async {
-    // final response = await http.post(
-    //   Uri.parse(
-    //       'http://15.207.212.144:9000/api/user/user/mob/resetandroidid?userId=$userId'),
-    //   headers: <String, String>{
-    //     'Content-Type': 'application/json; charset=UTF-8',
-    //   },
-    //   body: jsonEncode({}), // Empty body or if needed, include additional data
-    // );
+    
 
     final response = await ApiService.resetAndroidId(userId);
 

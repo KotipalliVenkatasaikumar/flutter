@@ -34,6 +34,7 @@ class _OtScreenState extends State<OtScreen> {
   final ConnectivityHandler connectivityHandler = ConnectivityHandler();
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final _descriptionController = TextEditingController();
 
   int? intRoleId;
   int? intOraganizationId;
@@ -64,6 +65,12 @@ class _OtScreenState extends State<OtScreen> {
     // initializeData();
     // _checkForUpdate();
     _checkConnectivity();
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkConnectivity() async {
@@ -274,9 +281,7 @@ class _OtScreenState extends State<OtScreen> {
         });
 
         return; // Early exit due to session expiration
-      }
-
-      if (response.statusCode == 200) {
+      } else if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;
@@ -827,6 +832,32 @@ class _OtScreenState extends State<OtScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                        color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(
+                        color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a description';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _submitFormData,
                 style: ElevatedButton.styleFrom(
@@ -861,7 +892,9 @@ class _OtScreenState extends State<OtScreen> {
       'roleId': _selectedRoleId,
       'employeeId': _selectedEmployeeId,
       'shiftTime': _selectedShiftId,
-      'toLocation': _selectedRelocationProjectId
+      'toLocation': _selectedRelocationProjectId,
+      'organizationId': intOraganizationId,
+      'description': _descriptionController.text,
     };
 
     try {
@@ -874,8 +907,10 @@ class _OtScreenState extends State<OtScreen> {
           _selectedRoleId = null;
           _selectedEmployeeId = null;
           _selectedShiftId = null;
+          _selectedRelocationProjectId = null;
           _isEmployeeDropdownEnabled =
               false; // Disable the employee dropdown again if needed
+          _descriptionController.clear();
         });
         showDialog(
           context: context,

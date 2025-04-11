@@ -135,10 +135,7 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
 
   Future<void> _fetchFlatTypes(String typeName) async {
     try {
-      // final response = await http.get(
-      //   Uri.parse(
-      //       'http://15.207.212.144:9000/api/user/commonreferencedetails/types/$typeName'),
-      // );
+     
       final response = await ApiService.getCommonReferenceDetails(typeName);
 
       if (response.statusCode == 200) {
@@ -167,10 +164,7 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
 
   Future<void> _fetchSources() async {
     try {
-      // final response = await http.get(
-      //   Uri.parse(
-      //       'http://15.207.212.144:9003/api/lead/leadsource/fetchall?leadSourceName='),
-      // );
+     
 
       final response = await ApiService.fetchLeadSource();
       if (response.statusCode == 200) {

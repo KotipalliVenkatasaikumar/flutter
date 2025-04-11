@@ -38,8 +38,7 @@ class _UserManageScreenState extends State<UserManageScreen> {
   }
 
   Future<void> _fetchProjects() async {
-    // final response = await http.get(Uri.parse(
-    //     'http://15.207.212.144:9002/api/project/project/org?organizationId=$intOrganizationId'));
+    
     final response =
         await ApiService.fetchProjectsUserManage(intOrganizationId!);
     if (response.statusCode == 200) {
@@ -57,8 +56,7 @@ class _UserManageScreenState extends State<UserManageScreen> {
   }
 
   Future<void> _fetchQrGenerators(String projectId) async {
-    // final response = await http.get(Uri.parse(
-    //     'http://15.207.212.144:9006/api/facility-management/securitypatrol/getallsecuritypatrolformob?projectId=$projectId&securityPatrolName='));
+   
     final response = await ApiService.fetchQrLocations(projectId);
     if (response.statusCode == 200) {
       setState(() {
@@ -75,8 +73,7 @@ class _UserManageScreenState extends State<UserManageScreen> {
   }
 
   Future<void> _fetchUsers() async {
-    // final response = await http.get(Uri.parse(
-    //     'http://15.207.212.144:9000/api/user/user/fetchall?organizationId=$intOrganizationId'));
+   
     final response = await ApiService.fetchOrgUsers(intOrganizationId!);
     if (response.statusCode == 200) {
       setState(() {
@@ -94,17 +91,7 @@ class _UserManageScreenState extends State<UserManageScreen> {
 
   void _submit() async {
     try {
-      // final response = await http.post(
-      //   Uri.parse('http://15.207.212.144:9003/api/lead/usermanage/add/SP'),
-      //   headers: <String, String>{
-      //     'Content-Type': 'application/json; charset=UTF-8',
-      //   },
-      //   body: jsonEncode(<String, dynamic>{
-      //     'projectId': int.parse(_selectedProjectId),
-      //     'referenceId': int.parse(_selectedQrGeneratorId),
-      //     'userId': int.parse(_selectedUserId),
-      //   }),
-      // );
+      
 
       final response = await ApiService.addUserManagementDetails(
         int.parse(_selectedProjectId),

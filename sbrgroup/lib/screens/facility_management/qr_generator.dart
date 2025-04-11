@@ -197,7 +197,7 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
         return; // Early exit due to session expiration
       }
 
-      if (response.statusCode == 200) {
+     else if (response.statusCode == 200) {
         final latestVersion = jsonDecode(response.body)['commonRefValue'];
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = packageInfo.version;
@@ -583,6 +583,13 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                   DropdownMenuItem<int>(
                     value: 91,
                     child: const Text('Security',
+                        style: TextStyle(
+                            fontSize: 16,
+                            color: Color.fromARGB(255, 80, 79, 79))),
+                  ),
+                  DropdownMenuItem<int>(
+                    value: 404,
+                    child: const Text('FO Visit',
                         style: TextStyle(
                             fontSize: 16,
                             color: Color.fromARGB(255, 80, 79, 79))),

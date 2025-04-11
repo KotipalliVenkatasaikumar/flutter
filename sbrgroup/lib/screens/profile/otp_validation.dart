@@ -45,9 +45,7 @@ class _OtpValidationScreenState extends State<OtpValidationScreen> {
       final otp = _otpController.text;
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? email = prefs.getString('email');
-      // final response = await http.get(
-      //   Uri.parse('http://15.207.212.144:9000/api/user/verify/$email/$otp'),
-      // );
+     
       final response = await ApiService.verifyOtp(email!, otp);
       if (response.statusCode == 200) {
         logger.d('OTP successful');

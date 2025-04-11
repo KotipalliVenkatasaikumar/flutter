@@ -45,9 +45,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (_formKey.currentState != null && _formKey.currentState!.validate()) {
       final email = _emailController.text;
 
-      // final response = await http.get(
-      //   Uri.parse('http://15.207.212.144:9000/api/user/generateotp/$email'),
-      // );
+      
       final response = await ApiService.generateOtp(email);
       if (response.statusCode == 200) {
         logger.d('Email successful');
