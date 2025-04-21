@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/facility_management/reports_projects.dart';
-import 'package:ajna/screens/sqflite/database_helper.dart';
-import 'package:ajna/screens/sqflite/schedule.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -31,9 +29,9 @@ import 'screens/notification/notification_service.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();
+  await Firebase.initializeApp();
 
-  // NotificationService().initialize(navigatorKey);
+  NotificationService().initialize(navigatorKey);
 
   runApp(const MyApp());
 }
@@ -347,8 +345,8 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text;
       final password = _passwordController.text;
 
-      // final response = await ApiService.login(email, password, androidId!);
-      final response = await ApiService.login(email, password);
+      final response = await ApiService.login(email, password, androidId!);
+      // final response = await ApiService.login(email, password);
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(response.body);

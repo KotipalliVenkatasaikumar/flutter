@@ -1,141 +1,279 @@
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+
+const MethodChannel _audioChannel = MethodChannel('emergency_audio_channel');
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  static final AudioPlayer _emergencyPlayer = AudioPlayer();
 
   NotificationService._internal();
+  factory NotificationService() => _instance;
+
   String? _deviceToken;
   String? _androidId;
   int? _userId;
-  int? organizationId;
-
-  factory NotificationService() => _instance;
+  int? _organizationId;
+  bool _isEmergencySoundPlaying = false;
 
   Future<void> initialize(GlobalKey<NavigatorState> navigatorKey) async {
-    // Request permission
-    NotificationSettings settings = await _messaging.requestPermission();
-    print('Notification permission: ${settings.authorizationStatus}');
+    NotificationSettings settings = await _messaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: true,
+      provisional: false,
+      sound: true,
+    );
+    debugPrint(
+        '🔔 Notification permission status: ${settings.authorizationStatus}');
+
     _userId = await Util.getUserId();
     _androidId = await Util.getUserAndroidId();
-    organizationId = await Util.getOrganizationId();
+    _organizationId = await Util.getOrganizationId();
+    _deviceToken = await _messaging.getToken();
+    debugPrint("✅ Device Token: $_deviceToken");
 
-    // Get and print the token
-    _messaging.getToken().then((token) {
-      _deviceToken = token;
-      print("Device Token: $_deviceToken");
+    if (_deviceToken != null &&
+        _androidId != null &&
+        _userId != null &&
+        _organizationId != null) {
+      await _storeDeviceToken(
+          _userId!, _deviceToken!, _androidId!, _organizationId!);
+    }
 
-      if (_deviceToken != null && _androidId != null && _userId != null) {
-        _storeDeviceToken(
-            _userId!, _deviceToken!, _androidId!, organizationId!);
-      }
-    });
-
-    // Listen to foreground notifications
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint("📨 Foreground notification received");
+      _handleNotificationSound(message, isForeground: true);
       _showNotificationDialog(message, navigatorKey);
     });
 
-    // Handle app opened from notification
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      _navigateToRoute(message, navigatorKey);
+      debugPrint("📨 App opened from background notification");
+      _handleNotificationSound(message, isForeground: false);
+      _showNotificationDialog(message, navigatorKey);
     });
 
-    // Handle notification when the app was terminated
     RemoteMessage? initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
-      _navigateToRoute(initialMessage, navigatorKey);
+      debugPrint("📨 App opened from terminated state via notification");
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleNotificationSound(initialMessage, isForeground: false);
+        _showNotificationDialog(initialMessage, navigatorKey);
+      });
     }
 
-    // Listen for token refresh
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      print('Token refreshed: $newToken');
-      if (_androidId != null && _userId != null) {
+      debugPrint('♻️ Token refreshed: $newToken');
+      if (_androidId != null && _userId != null && _organizationId != null) {
         _updateDeviceTokenInDatabase(
-            _userId!, newToken, _androidId!, organizationId!);
+            _userId!, newToken, _androidId!, _organizationId!);
       }
     });
+
+    FirebaseMessaging.onBackgroundMessage(_handleBackgroundNotification);
+  }
+
+  void _handleNotificationSound(RemoteMessage message,
+      {required bool isForeground}) {
+    final isEmergency = message.data['emergency'] == 'true';
+    if (isEmergency) {
+      if (isForeground) {
+        playEmergencyRingtone();
+      }
+      // Background/terminated sound is handled by native code
+    } else {
+      if (isForeground) {
+        playNormalNotificationSound();
+      }
+      // Background/terminated sound is the system default for the channel
+    }
   }
 
   void _showNotificationDialog(
       RemoteMessage message, GlobalKey<NavigatorState> navigatorKey) {
-    if (navigatorKey.currentContext != null) {
-      showDialog(
-        context: navigatorKey.currentContext!,
-        builder: (_) => AlertDialog(
-          title: Text(message.notification?.title ?? 'Notification'),
-          content: Text(message.notification?.body ?? 'No content'),
-          actions: [
+    if (navigatorKey.currentContext == null) return;
+
+    final isEmergency = message.data['emergency'] == 'true';
+
+    showDialog(
+      context: navigatorKey.currentContext!,
+      builder: (_) => AlertDialog(
+        title: Text(message.notification?.title ?? 'Notification'),
+        content: Text(message.notification?.body ?? 'No content'),
+        actions: [
+          if (!isEmergency)
             TextButton(
               onPressed: () {
                 Navigator.of(navigatorKey.currentContext!).pop();
                 _navigateToRoute(message, navigatorKey);
               },
-              child: Text('View'),
+              child: const Text('View'),
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(navigatorKey.currentContext!).pop();
-              },
-              child: Text('Dismiss'),
-            ),
-          ],
-        ),
-      );
-    }
+          TextButton(
+            onPressed: () {
+              stopRingtone();
+              Navigator.of(navigatorKey.currentContext!).pop();
+            },
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    ).then((_) {
+      // Stop the sound when the dialog is dismissed (user interaction)
+      stopRingtone();
+    });
   }
 
   void _navigateToRoute(
       RemoteMessage message, GlobalKey<NavigatorState> navigatorKey) {
-    String route = message.data['route'] ?? '/main';
+    stopRingtone();
+    final route = message.data['route'] ?? '/main';
     navigatorKey.currentState?.pushNamed(route);
   }
 
-  // // Retrieve Android ID
-  // Future<String?> _getAndroidId() async {
-  //   DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-  //   AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-  //   return androidInfo.id;
+  // static Future<void> _handleBackgroundNotification(
+  //     RemoteMessage message) async {
+  //   if (message.data['emergency'] == 'true') {
+  //     try {
+  //       await _audioChannel.invokeMethod('playEmergencySound');
+  //     } catch (e) {
+  //       debugPrint(
+  //           "❌ Error playing emergency sound (background - MethodChannel): $e");
+  //       // Keep the fallback in case of issues with the MethodChannel
+  //       playEmergencyRingtoneInBackground();
+  //     }
+  //   } else {
+  //     // No specific sound to play here for normal notifications in the background/terminated state.
+  //     // The system will play the default sound for the "high_importance_channel".
+  //   }
   // }
 
-  // Method to update device token and Android ID in the backend
-  Future<void> _updateDeviceTokenInDatabase(
-      int userId, String newToken, String androidId, int organizationId) async {
-    try {
-      final response = await ApiService.updateDeviceTokenWithAndroidId(
-          userId, newToken, androidId, organizationId);
-      print("Response Status: ${response.statusCode}");
-      if (response.statusCode == 200) {
-        print(
-            "Device token and Android ID updated successfully in the database");
-      } else {
-        print("Failed to update device token: ${response.body}");
+  static Future<void> _handleBackgroundNotification(
+      RemoteMessage message) async {
+    if (message.data['emergency'] == 'true') {
+      try {
+        await _audioChannel.invokeMethod('playEmergencySound');
+      } catch (e) {
+        debugPrint("❌ Error playing emergency sound in background: $e");
       }
-    } catch (e) {
-      print("Error while updating device token and Android ID: $e");
     }
   }
 
-  // Method to store device token with query parameters (matching your Java backend)
-  Future<void> _storeDeviceToken(int userId, String deviceToken,
-      String androidId, int organizationId) async {
+  void playEmergencyRingtone() async {
     try {
-      final response = await ApiService.storeDeviceToken(
-          userId, deviceToken, androidId, organizationId);
+      await _emergencyPlayer.setReleaseMode(ReleaseMode.loop);
+      await _emergencyPlayer.play(AssetSource('sounds/emergency_tone.mp3'));
+      _isEmergencySoundPlaying = true;
+      debugPrint("🚨 Playing emergency ringtone (Flutter)");
+    } catch (e) {
+      debugPrint("❌ Error playing emergency sound (Flutter): $e");
+    }
+  }
 
-      print("Response Status: ${response.statusCode}");
-      print("Response Body: ${response.body}");
+  static Future<void> playEmergencyRingtoneInBackground() async {
+    try {
+      final player = AudioPlayer();
+      await player.setReleaseMode(ReleaseMode.loop);
+      await player.play(AssetSource('sounds/emergency_tone.mp3'));
+      // We don't track _isEmergencySoundPlaying here as this is for background fallback
+      debugPrint(
+          "🚨 Playing emergency ringtone (Flutter - Background Fallback)");
+      // It's crucial to stop this player when the app comes to foreground or is dismissed
+      // This might require more sophisticated handling based on your app's lifecycle.
+      // For a simple approach, we might rely more on the native implementation for looping in the background.
+    } catch (e) {
+      debugPrint(
+          "❌ Error playing emergency sound (Flutter - Background Fallback): $e");
+    }
+  }
 
-      if (response.statusCode == 200) {
-        print("Device token stored successfully");
-      } else {
-        print("Failed to store device token: ${response.body}");
+  static void playNormalNotificationSound() {
+    try {
+      FlutterRingtonePlayer.play(
+        android: AndroidSounds.notification,
+        ios: IosSounds.triTone,
+        looping: false,
+        volume: 1.0,
+      );
+      debugPrint("🔔 Playing normal notification sound");
+    } catch (e) {
+      debugPrint("❌ Error playing normal notification sound: $e");
+    }
+  }
+
+  void stopRingtone() async {
+    try {
+      if (_isEmergencySoundPlaying) {
+        await _emergencyPlayer.stop();
+        _isEmergencySoundPlaying = false;
+        debugPrint("⏹ Emergency ringtone stopped (Flutter)");
+      }
+      try {
+        await _audioChannel.invokeMethod('stopEmergencySound');
+        debugPrint("⏹ Emergency sound stopped (Native)");
+      } catch (e) {
+        debugPrint("❌ Error stopping emergency sound (Native): $e");
       }
     } catch (e) {
-      print("Error while sending token to server: $e");
+      debugPrint("❌ Error stopping ringtone (Flutter): $e");
+    }
+  }
+
+  Future<void> _storeDeviceToken(
+    int userId,
+    String deviceToken,
+    String androidId,
+    int organizationId,
+  ) async {
+    try {
+      final response = await ApiService.storeDeviceToken(
+        // Placeholder
+        userId,
+        deviceToken,
+        androidId,
+        organizationId,
+      );
+      debugPrint("📦 Store Token Response: ${response.statusCode}");
+      if (response.statusCode == 200) {
+        debugPrint("✅ Device token stored successfully");
+      } else {
+        debugPrint("❌ Failed to store token: ${response.body}");
+      }
+    } catch (e) {
+      debugPrint("❌ Exception while storing token: $e");
+    }
+  }
+
+  Future<void> _updateDeviceTokenInDatabase(
+    int userId,
+    String newToken,
+    String androidId,
+    int organizationId,
+  ) async {
+    try {
+      final response = await ApiService.updateDeviceTokenWithAndroidId(
+        // Placeholder
+        userId,
+        newToken,
+        androidId,
+        organizationId,
+      );
+      debugPrint("🔁 Update Token Response: ${response.statusCode}");
+      if (response.statusCode == 200) {
+        debugPrint("✅ Device token updated successfully");
+      } else {
+        debugPrint("❌ Failed to update token: ${response.body}");
+      }
+    } catch (e) {
+      debugPrint("❌ Exception while updating token: $e");
     }
   }
 }
