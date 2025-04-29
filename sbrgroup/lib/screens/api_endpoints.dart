@@ -1008,18 +1008,23 @@ class ApiService {
   }
 
   // Method to send notification using query parameters
-  static Future<http.Response> sendNotification(
-      List<int> userIds, String title, String body) async {
+  // Updated sendNotification method
+  static Future<http.Response> sendNotification({
+    required List<int> userIds,
+    required String title,
+    required String body,
+    String? route = '', // Default route if not provided
+    required int organizationId, // Organization ID passed as parameter
+  }) async {
     if (userIds.isEmpty) {
       throw Exception("User IDs must not be empty.");
     }
 
-    // Convert the list of user IDs to a comma-separated string
     String userIdsString = userIds.join(',');
 
     // Prepare the URL with query parameters
     final String url = Uri.parse(
-      '$notificationUrl/api/user/fcm/sendnotification?userIds=$userIdsString&title=$title&body=$body',
+      '$notificationUrl/api/user/fcm/sendnotification?userIds=$userIdsString&title=$title&body=$body&route=$route&organizationId=$organizationId',
     ).toString();
 
     // Setup headers
@@ -1036,6 +1041,12 @@ class ApiService {
         Uri.parse(url),
         headers: headers, // Attach headers if necessary
       );
+
+      if (response.statusCode == 200) {
+        print('Notification sent successfully');
+      } else {
+        throw Exception('Failed to send notification: ${response.body}');
+      }
 
       // Return the response
       return response;
