@@ -1008,18 +1008,23 @@ class ApiService {
   }
 
   // Method to send notification using query parameters
-  static Future<http.Response> sendNotification(
-      List<int> userIds, String title, String body) async {
+  // Updated sendNotification method
+  static Future<http.Response> sendNotification({
+    required List<int> userIds,
+    required String title,
+    required String body,
+    String? route = '', // Default route if not provided
+    required int organizationId, // Organization ID passed as parameter
+  }) async {
     if (userIds.isEmpty) {
       throw Exception("User IDs must not be empty.");
     }
 
-    // Convert the list of user IDs to a comma-separated string
     String userIdsString = userIds.join(',');
 
     // Prepare the URL with query parameters
     final String url = Uri.parse(
-      '$notificationUrl/api/user/fcm/sendnotification?userIds=$userIdsString&title=$title&body=$body',
+      '$notificationUrl/api/user/fcm/sendnotification?userIds=$userIdsString&title=$title&body=$body&route=$route&organizationId=$organizationId',
     ).toString();
 
     // Setup headers
@@ -1036,6 +1041,12 @@ class ApiService {
         Uri.parse(url),
         headers: headers, // Attach headers if necessary
       );
+
+      if (response.statusCode == 200) {
+        print('Notification sent successfully');
+      } else {
+        throw Exception('Failed to send notification: ${response.body}');
+      }
 
       // Return the response
       return response;
@@ -1216,5 +1227,103 @@ class ApiService {
 
     // Make the HTTP request
     return await getRequest(baseUrl1, endpoint); // Use getRequest
+  }
+
+  static Future<http.Response> submitRegisterFace(
+      String empId, File imageFile, List<double> embeddings) async {
+    final url =
+        Uri.parse('${baseUrl2}api/facility-management/attendance/register');
+
+    var request = http.MultipartRequest('POST', url);
+
+    // Convert list to JSON string
+    String embeddingsJson = jsonEncode(embeddings);
+    request.fields['employeeId'] = empId;
+    request.fields['embeddings'] = embeddingsJson;
+
+    if (await imageFile.exists()) {
+      final fileExtension = path.extension(imageFile.path).toLowerCase();
+      final mimeType = fileExtension == '.png' ? 'png' : 'jpeg';
+
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'fileName',
+          imageFile.path,
+          contentType: MediaType('image', mimeType),
+        ),
+      );
+    } else {
+      throw Exception('Image file does not exist: ${imageFile.path}');
+    }
+
+    // Add Authorization header
+    request.headers['Authorization'] = 'Bearer $accessToken';
+
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        print('✅ Face registered: ${response.body}');
+      } else {
+        print('❌ Server error: ${response.statusCode}, Body: ${response.body}');
+      }
+
+      return response;
+    } catch (e) {
+      print('🚨 Error during face registration: $e');
+      throw Exception('Error during upload: $e');
+    }
+  }
+
+  static Future<http.Response> submitCaptureFace(
+      File imageFile, List<double> embeddings) async {
+    final url = Uri.parse(
+        '${baseUrl2}api/facility-management/attendance/persondetection');
+    var request = http.MultipartRequest('POST', url);
+
+    String embeddingsJson = jsonEncode(embeddings);
+    request.fields['embeddings'] = embeddingsJson;
+
+    if (await imageFile.exists()) {
+      final fileExtension = path.extension(imageFile.path).toLowerCase();
+      final mimeType = fileExtension == '.png' ? 'png' : 'jpeg';
+
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'fileName',
+          imageFile.path,
+          contentType: MediaType('image', mimeType),
+        ),
+      );
+    } else {
+      throw Exception('Image file does not exist: ${imageFile.path}');
+    }
+
+    // Add Authorization header
+    request.headers['Authorization'] = 'Bearer $accessToken';
+
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        print('✅ Face capture submitted successfully');
+      } else {
+        print(
+            '❌ Server responded with ${response.statusCode}: ${response.body}');
+      }
+
+      return response;
+    } catch (e) {
+      print('🚨 Error submitting capture: $e');
+      throw Exception('Error during upload: $e');
+    }
+  }
+
+  static Future<http.Response> fetchUsersForFace(
+      String organizationId, String userName) async {
+    return await getRequest(baseUrl1,
+        'api/user/user/fetchall?organizationId=$organizationId&userName=$userName');
   }
 }

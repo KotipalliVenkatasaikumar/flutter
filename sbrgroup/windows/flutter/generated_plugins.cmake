@@ -15,6 +15,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   permission_handler_windows
   printing
   share_plus
+  tflite_flutter_plus
   url_launcher_windows
 )
 

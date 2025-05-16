@@ -59,6 +59,8 @@ dependencies {
     implementation "androidx.work:work-runtime-ktx:2.7.1" // Adjust version as needed
     implementation platform('com.google.firebase:firebase-bom:32.2.0') // Latest version
     implementation 'com.google.firebase:firebase-messaging'
+    implementation 'org.tensorflow:tensorflow-lite:2.13.0'
+
 }
 
 flutter {

@@ -6,6 +6,7 @@ import 'package:ajna/screens/facility_management/ot_project_wise_report.dart';
 import 'package:ajna/screens/facility_management/ot_report.dart';
 import 'package:ajna/screens/facility_management/ot_screen.dart';
 import 'package:ajna/screens/facility_management/schedule_with_report.dart';
+import 'package:ajna/screens/notification/notification_sending.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
 import 'package:ajna/screens/student/MathTablesTestScreen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -291,6 +292,15 @@ class _HomeScreenState extends State<HomeScreen> {
       'imagePath': 'lib/assets/images/fo_report.png',
       'label': 'Fo Report',
       'onTap': () => FoReportsScreen(),
+      // 'onTap': () => OtReportScreen(),
+    },
+
+    {
+      //'icon': Icons.construction,
+      'icon': null,
+      'imagePath': 'lib/assets/images/notification.png',
+      'label': 'Notification',
+      'onTap': () => NotificationSendingScreen(),
       // 'onTap': () => OtReportScreen(),
     },
   ];
