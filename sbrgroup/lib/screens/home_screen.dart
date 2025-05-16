@@ -1,15 +1,31 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:ajna/main.dart';
+import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/screens/app_bar.dart';
+import 'package:ajna/screens/attendace/attendace_report.dart';
+import 'package:ajna/screens/attendace/fo_attendance.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
+import 'package:ajna/screens/crm/crm_home_screen.dart';
+import 'package:ajna/screens/crm/raise-issue.dart';
+import 'package:ajna/screens/face_detection/admin_face_registration.dart';
+import 'package:ajna/screens/face_detection/face_detection.dart';
+import 'package:ajna/screens/facility_management/customer_consumption.dart';
 import 'package:ajna/screens/facility_management/fo_report.dart';
 import 'package:ajna/screens/facility_management/ot_project_wise_report.dart';
-import 'package:ajna/screens/facility_management/ot_report.dart';
 import 'package:ajna/screens/facility_management/ot_screen.dart';
-import 'package:ajna/screens/facility_management/schedule_with_report.dart';
+import 'package:ajna/screens/facility_management/qr_generator.dart';
+import 'package:ajna/screens/facility_management/qr_schedule.dart';
+import 'package:ajna/screens/facility_management/qrregenerate.dart';
+import 'package:ajna/screens/facility_management/reports_projects.dart';
+import 'package:ajna/screens/facility_management/reset_android_id.dart';
+import 'package:ajna/screens/facility_management/user_manage_screen.dart';
+import 'package:ajna/screens/facility_management/user_registration.dart';
 import 'package:ajna/screens/notification/notification_sending.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
 import 'package:ajna/screens/student/MathTablesTestScreen.dart';
-import 'package:device_info_plus/device_info_plus.dart';
+import 'package:ajna/screens/util.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
@@ -18,30 +34,8 @@ import 'package:install_plugin/install_plugin.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:ajna/main.dart';
-import 'package:ajna/screens/account_entry/account_entry.dart';
-import 'package:ajna/screens/api_endpoints.dart';
-import 'package:ajna/screens/app_bar.dart';
-import 'package:ajna/screens/crm/crm_home_screen.dart';
-import 'package:ajna/screens/crm/raise-issue.dart';
-import 'package:ajna/screens/attendace/attendace_report.dart';
-import 'package:ajna/screens/attendace/fo_attendance.dart';
-import 'package:ajna/screens/facility_management/customer_consumption.dart';
-import 'package:ajna/screens/facility_management/qr_generator.dart';
-import 'package:ajna/screens/facility_management/qr_schedule.dart';
-import 'package:ajna/screens/facility_management/qrregenerate.dart';
-import 'package:ajna/screens/facility_management/reports_projects.dart';
-import 'package:ajna/screens/facility_management/reset_android_id.dart';
-import 'package:ajna/screens/facility_management/user_manage_screen.dart';
-import 'package:ajna/screens/facility_management/user_registration.dart';
-import 'package:ajna/screens/presales/add_lead.dart';
-import 'package:ajna/screens/presales/presales_page.dart';
-import 'package:ajna/screens/sales/site_visit_form.dart';
-import 'package:ajna/screens/util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MaterialApp(
@@ -302,6 +296,21 @@ class _HomeScreenState extends State<HomeScreen> {
       'label': 'Notification',
       'onTap': () => NotificationSendingScreen(),
       // 'onTap': () => OtReportScreen(),
+    },
+    {
+      //'icon': Icons.bar_chart,
+      'icon': null,
+      'imagePath': 'lib/assets/images/registration.png',
+      'label': 'Face Registration',
+      'onTap': () => AdminFaceRegisterScreen(),
+    },
+
+    {
+      //'icon': Icons.bar_chart,
+      'icon': null,
+      'imagePath': 'lib/assets/images/recognition.png',
+      'label': 'Face Recognition',
+      'onTap': () => FaceAttendanceScreen(),
     },
   ];
 
