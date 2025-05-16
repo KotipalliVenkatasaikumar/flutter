@@ -6,6 +6,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   file_selector_linux
   printing
+  tflite_flutter
+  tflite_flutter_plus
   url_launcher_linux
 )
 
