@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:http_parser/http_parser.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart'; // Import the path package
 // Import for MediaType
@@ -24,17 +24,17 @@ class ApiService {
   // static const String baseUrl4 = 'http://15.207.212.144/';
   // static const String notificationUrl = 'http://15.207.212.144';
 
-  // static const String baseUrl1 = 'http://65.2.49.230/';
-  // static const String baseUrl2 = 'http://65.2.49.230/';
-  // static const String baseUrl3 = 'http://65.2.49.230/';
-  // static const String baseUrl4 = 'http://65.2.49.230/';
-  // static const String notificationUrl = 'http://65.2.49.230';
+  static const String baseUrl1 = 'http://65.2.49.230:1093/';
+  static const String baseUrl2 = 'http://65.2.49.230:1093/';
+  static const String baseUrl3 = 'http://65.2.49.230:1093/';
+  static const String baseUrl4 = 'http://65.2.49.230:1093/';
+  static const String notificationUrl = 'http://65.2.49.230:1093';
 
-  static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
-  static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
-  static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
-  static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
-  static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
+  // static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
+  // static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
+  // static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
+  // static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
+  // static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
 
   // static const String baseUrl1 = 'https://dc20-49-207-220-251.ngrok-free.app/';
   // static const String baseUrl2 = 'https://dc20-49-207-220-251.ngrok-free.app/';

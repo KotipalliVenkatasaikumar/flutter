@@ -9,12 +9,12 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 
-class AttendanceScreen extends StatefulWidget {
+class FaceAttendanceScreen extends StatefulWidget {
   @override
   _AttendanceScreenState createState() => _AttendanceScreenState();
 }
 
-class _AttendanceScreenState extends State<AttendanceScreen> {
+class _AttendanceScreenState extends State<FaceAttendanceScreen> {
   CameraController? _cameraController;
   Future<void>? _cameraInitFuture;
   bool _isDetecting = false;
