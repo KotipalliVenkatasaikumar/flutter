@@ -24,11 +24,11 @@ class ApiService {
   // static const String baseUrl4 = 'http://15.207.212.144/';
   // static const String notificationUrl = 'http://15.207.212.144';
 
-  static const String baseUrl1 = 'http://65.2.49.230:1093/';
-  static const String baseUrl2 = 'http://65.2.49.230:1093/';
-  static const String baseUrl3 = 'http://65.2.49.230:1093/';
-  static const String baseUrl4 = 'http://65.2.49.230:1093/';
-  static const String notificationUrl = 'http://65.2.49.230:1093';
+  // static const String baseUrl1 = 'http://65.2.49.230:1093/';
+  // static const String baseUrl2 = 'http://65.2.49.230:1093/';
+  // static const String baseUrl3 = 'http://65.2.49.230:1093/';
+  // static const String baseUrl4 = 'http://65.2.49.230:1093/';
+  // static const String notificationUrl = 'http://65.2.49.230:1093';
 
   // static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
   // static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
@@ -36,12 +36,12 @@ class ApiService {
   // static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
   // static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
 
-  // static const String baseUrl1 = 'https://dc20-49-207-220-251.ngrok-free.app/';
-  // static const String baseUrl2 = 'https://dc20-49-207-220-251.ngrok-free.app/';
-  // static const String baseUrl3 = 'https://dc20-49-207-220-251.ngrok-free.app/';
-  // static const String baseUrl4 = 'https://dc20-49-207-220-251.ngrok-free.app/';
-  // static const String notificationUrl =
-  //     'https://dc20-49-207-220-251.ngrok-free.app';
+  static const String baseUrl1 = 'https://0e47-49-207-234-31.ngrok-free.app/';
+  static const String baseUrl2 = 'https://0e47-49-207-234-31.ngrok-free.app/';
+  static const String baseUrl3 = 'https://0e47-49-207-234-31.ngrok-free.app/';
+  static const String baseUrl4 = 'https://0e47-49-207-234-31.ngrok-free.app/';
+  static const String notificationUrl =
+      'https://0e47-49-207-234-31.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
@@ -1276,14 +1276,24 @@ class ApiService {
     }
   }
 
-  static Future<http.Response> submitCaptureFace(
-      File imageFile, List<double> embeddings) async {
+  static Future<http.Response> submitCaptureFace({
+    required File imageFile,
+    required List<double> embeddings,
+    required int shiftId,
+    required int? organizationId,
+    required bool isLogin, // true = login, false = logout
+  }) async {
+    final endpoint = isLogin ? 'loginPersonDetection' : 'logoutPersonDetection';
+
     final url = Uri.parse(
-        '${baseUrl2}api/facility-management/attendance/persondetection');
+      '${baseUrl2}api/facility-management/shiftBasedAttendance/$endpoint',
+    );
+
     var request = http.MultipartRequest('POST', url);
 
-    String embeddingsJson = jsonEncode(embeddings);
-    request.fields['embeddings'] = embeddingsJson;
+    request.fields['embeddings'] = jsonEncode(embeddings);
+    request.fields['shiftId'] = shiftId.toString();
+    request.fields['organizationId'] = organizationId.toString();
 
     if (await imageFile.exists()) {
       final fileExtension = path.extension(imageFile.path).toLowerCase();
@@ -1291,7 +1301,7 @@ class ApiService {
 
       request.files.add(
         await http.MultipartFile.fromPath(
-          'fileName',
+          'file',
           imageFile.path,
           contentType: MediaType('image', mimeType),
         ),
@@ -1300,7 +1310,6 @@ class ApiService {
       throw Exception('Image file does not exist: ${imageFile.path}');
     }
 
-    // Add Authorization header
     request.headers['Authorization'] = 'Bearer $accessToken';
 
     try {
@@ -1308,15 +1317,16 @@ class ApiService {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        print('✅ Face capture submitted successfully');
+        print(
+            '✅ [${isLogin ? 'IN' : 'OUT'}] Face capture submitted successfully');
       } else {
         print(
-            '❌ Server responded with ${response.statusCode}: ${response.body}');
+            '❌ [${isLogin ? 'IN' : 'OUT'}] Server responded with ${response.statusCode}: ${response.body}');
       }
 
       return response;
     } catch (e) {
-      print('🚨 Error submitting capture: $e');
+      print('🚨 [${isLogin ? 'IN' : 'OUT'}] Error submitting capture: $e');
       throw Exception('Error during upload: $e');
     }
   }

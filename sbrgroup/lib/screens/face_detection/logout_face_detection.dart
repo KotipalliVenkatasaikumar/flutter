@@ -11,12 +11,12 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 
-class FaceAttendanceScreen extends StatefulWidget {
+class LogOutFaceAttendanceScreen extends StatefulWidget {
   @override
   _AttendanceScreenState createState() => _AttendanceScreenState();
 }
 
-class _AttendanceScreenState extends State<FaceAttendanceScreen> {
+class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   CameraController? _cameraController;
   Future<void>? _cameraInitFuture;
   bool _isDetecting = false;
@@ -123,7 +123,6 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
         _isLoading ||
         _isProcessingAPI ||
         _selectedShiftId == null) return;
-
     _isDetecting = true;
 
     try {
@@ -180,7 +179,7 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
       final image = await _cameraController!.takePicture();
       File imageFile = File(image.path);
       await _generateEmbedding(imageFile);
-      await _sendAttendanceToAPI(imageFile, isLogin: true);
+      await _sendAttendanceToAPI(imageFile, isLogin: false);
     } catch (e) {
       print("Error taking picture: $e");
     } finally {
@@ -232,8 +231,8 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
         imageFile: imageFile,
         embeddings: _generatedEmbeddings,
         shiftId: _selectedShiftId!,
-        organizationId: _organizationId,
         isLogin: isLogin,
+        organizationId: _organizationId,
       );
 
       String message = response.body.toString();
@@ -316,7 +315,7 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'In Face Capture',
+              'Out Face Capture',
               style: TextStyle(
                 fontSize: width > 600 ? 22 : 18,
                 color: Colors.white,

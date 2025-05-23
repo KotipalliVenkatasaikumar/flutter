@@ -11,6 +11,7 @@ import 'package:ajna/screens/crm/crm_home_screen.dart';
 import 'package:ajna/screens/crm/raise-issue.dart';
 import 'package:ajna/screens/face_detection/admin_face_registration.dart';
 import 'package:ajna/screens/face_detection/face_detection.dart';
+import 'package:ajna/screens/face_detection/logout_face_detection.dart';
 import 'package:ajna/screens/facility_management/customer_consumption.dart';
 import 'package:ajna/screens/facility_management/fo_report.dart';
 import 'package:ajna/screens/facility_management/ot_project_wise_report.dart';
@@ -309,8 +310,15 @@ class _HomeScreenState extends State<HomeScreen> {
       //'icon': Icons.bar_chart,
       'icon': null,
       'imagePath': 'lib/assets/images/recognition.png',
-      'label': 'Face Recognition',
+      'label': 'In Face Recognition',
       'onTap': () => FaceAttendanceScreen(),
+    },
+    {
+      //'icon': Icons.bar_chart,
+      'icon': null,
+      'imagePath': 'lib/assets/images/recognition.png',
+      'label': 'Out Face Recognition',
+      'onTap': () => LogOutFaceAttendanceScreen(),
     },
   ];
 
