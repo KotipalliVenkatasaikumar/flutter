@@ -33,6 +33,9 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   int? _selectedShiftId;
   int? _organizationId;
 
+  int? _selectedLocationId;
+  List<Map<String, dynamic>> _locations = [];
+
   @override
   void initState() {
     super.initState();
@@ -75,8 +78,9 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   }
 
   Future<void> _initializeModel() async {
-    fetchShiftData();
     _organizationId = await Util.getOrganizationId();
+    fetchShiftData();
+    fetchLocationData(_organizationId);
     print("Initializing model...");
     _faceEmbeddingService = FaceEmbeddingService();
     await _faceEmbeddingService.init();
@@ -112,6 +116,35 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     }
   }
 
+  Future<void> fetchLocationData(int? organizationId) async {
+    setState(() {
+      _isLoading = true; // Start loading
+    });
+
+    try {
+      final response = await ApiService.fetchLocation(organizationId);
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+
+        setState(() {
+          _locations = data
+              .map((location) => {
+                    'id': location['id'],
+                    'location': location['location'],
+                  })
+              .toList();
+
+          _isLoading = false; // Stop loading
+        });
+      }
+    } catch (error) {
+      setState(() {
+        _isLoading = false; // Stop loading
+      });
+    }
+  }
+
   Future<void> _speak(String message) async {
     await _flutterTts.stop();
     await _flutterTts.speak(message);
@@ -122,7 +155,8 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
         _faceDetected ||
         _isLoading ||
         _isProcessingAPI ||
-        _selectedShiftId == null) return;
+        _selectedShiftId == null ||
+        _selectedLocationId == null) return;
     _isDetecting = true;
 
     try {
@@ -233,6 +267,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
         shiftId: _selectedShiftId!,
         isLogin: isLogin,
         organizationId: _organizationId,
+        locationId: _selectedLocationId,
       );
 
       String message = response.body.toString();
@@ -328,8 +363,31 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
       ),
       body: _isLoading
           ? _buildLoadingOverlay()
-          : _selectedShiftId == null
-              ? _buildShiftDropdown() // Show dropdown first
+          : (_selectedShiftId == null || _selectedLocationId == null)
+              ? SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildShiftDropdown(),
+                      _buildLocationDropdown(),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (_selectedShiftId != null &&
+                              _selectedLocationId != null) {
+                            setState(() {}); // trigger camera view
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+                        ),
+                        child: const Text(
+                          'Continue',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
               : Stack(
                   children: [
                     _buildCameraPreview(),
@@ -416,6 +474,58 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
         validator: (value) {
           if (value == null) {
             return 'Please select a shift';
+          }
+          return null;
+        },
+      ),
+    );
+  }
+
+  Widget _buildLocationDropdown() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: DropdownButtonFormField<int>(
+        decoration: InputDecoration(
+          labelText: 'Select Location',
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderSide: const BorderSide(
+              color: Color.fromARGB(255, 41, 221, 200),
+              width: 1.0,
+            ),
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: const BorderSide(
+              color: Color.fromARGB(255, 23, 158, 142),
+              width: 2.0,
+            ),
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+        ),
+        value: _selectedLocationId,
+        items: _locations.map((location) {
+          return DropdownMenuItem<int>(
+            value: location['id'],
+            child: Text(
+              location['location'],
+              style: const TextStyle(
+                fontSize: 16,
+                color: Color.fromARGB(255, 80, 79, 79),
+              ),
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          setState(() {
+            _selectedLocationId = value;
+          });
+        },
+        validator: (value) {
+          if (value == null) {
+            return 'Please select a location';
           }
           return null;
         },

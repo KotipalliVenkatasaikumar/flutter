@@ -30,18 +30,18 @@ class ApiService {
   // static const String baseUrl4 = 'http://65.2.49.230:1093/';
   // static const String notificationUrl = 'http://65.2.49.230:1093';
 
-  // static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
-  // static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
-  // static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
-  // static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
-  // static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
+  static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
+  static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
 
-  static const String baseUrl1 = 'https://0e47-49-207-234-31.ngrok-free.app/';
-  static const String baseUrl2 = 'https://0e47-49-207-234-31.ngrok-free.app/';
-  static const String baseUrl3 = 'https://0e47-49-207-234-31.ngrok-free.app/';
-  static const String baseUrl4 = 'https://0e47-49-207-234-31.ngrok-free.app/';
-  static const String notificationUrl =
-      'https://0e47-49-207-234-31.ngrok-free.app';
+  // static const String baseUrl1 = 'https://53bc-49-207-215-77.ngrok-free.app/';
+  // static const String baseUrl2 = 'https://53bc-49-207-215-77.ngrok-free.app/';
+  // static const String baseUrl3 = 'https://53bc-49-207-215-77.ngrok-free.app/';
+  // static const String baseUrl4 = 'https://53bc-49-207-215-77.ngrok-free.app/';
+  // static const String notificationUrl =
+  //     'https://53bc-49-207-215-77.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
@@ -926,6 +926,11 @@ class ApiService {
         baseUrl2, 'api/user/commonreferencedetails/types/Shift_Timings');
   }
 
+  static Future<http.Response> fetchLocation(int? organizationId) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/facility/getattendancelocationbyorg?orgId=$organizationId');
+  }
+
   // static fetchAttendanceDetails(int i, int j, String selectedLocation, String selectedShift, String selectedDateRange) {}
 
   static Future<http.Response> fetchAttendanceDetails(
@@ -1281,7 +1286,8 @@ class ApiService {
     required List<double> embeddings,
     required int shiftId,
     required int? organizationId,
-    required bool isLogin, // true = login, false = logout
+    required bool isLogin,
+    required int? locationId, // true = login, false = logout
   }) async {
     final endpoint = isLogin ? 'loginPersonDetection' : 'logoutPersonDetection';
 
@@ -1294,6 +1300,7 @@ class ApiService {
     request.fields['embeddings'] = jsonEncode(embeddings);
     request.fields['shiftId'] = shiftId.toString();
     request.fields['organizationId'] = organizationId.toString();
+    request.fields['locationId'] = locationId.toString();
 
     if (await imageFile.exists()) {
       final fileExtension = path.extension(imageFile.path).toLowerCase();
