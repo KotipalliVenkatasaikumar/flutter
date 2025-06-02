@@ -912,7 +912,7 @@ class ApiService {
       String selectedRole,
       String selectedDateRange) async {
     return await getRequest(baseUrl2,
-        'api/facility-management/attendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange');
+        'api/facility-management/shiftBasedAttendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange');
   }
 
   static Future<http.Response> fetchAttendanceLocation(
@@ -946,7 +946,7 @@ class ApiService {
     return await getRequest(
         baseUrl2,
         // 'api/facility-management/attendance/dashboard/attendance/data?userId=$userId&organizationId=$organizationId&shiftId=$selectedShift&locationId=$selectedLocation&range=$selectedDateRange'
-        'api/facility-management/attendance/allAttendance?userName=$userName&userId=$userId&page=$page&size=$size&&attendanceStatus=$attendanceStatus&shiftIds=$selectedShift&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange');
+        'api/facility-management/shiftBasedAttendance/allAttendance?userName=$userName&userId=$userId&page=$page&size=$size&&attendanceStatus=$attendanceStatus&shiftIds=$selectedShift&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange');
   }
 
   // Method to store device token with query parameters (matching your Java backend)
@@ -1069,7 +1069,7 @@ class ApiService {
       String selectedDateRange) async {
     // Ensure that there are no invisible characters
     final String url =
-        'api/facility-management/attendance/rolebasedreport?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds&locationId=$selectedLocation&range=$selectedDateRange';
+        'api/facility-management/shiftBasedAttendance/rolebasedreport?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds&locationId=$selectedLocation&range=$selectedDateRange';
 
     return await getRequest(baseUrl2, url);
   }

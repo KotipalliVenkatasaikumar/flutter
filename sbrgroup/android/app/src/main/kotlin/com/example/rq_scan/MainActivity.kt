@@ -52,7 +52,7 @@ class MainActivity : FlutterActivity() {
             // Emergency channel
             val emergencySound = Uri.parse("android.resource://$packageName/raw/emergency_tone")
             val emergencyAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setUsage(AudioAttributes.USAGE_ALARM) // Changed to ALARM to bypass silent/vibrate
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
 
@@ -63,6 +63,9 @@ class MainActivity : FlutterActivity() {
             ).apply {
                 description = "Used for emergency alerts"
                 setSound(emergencySound, emergencyAttributes)
+                enableVibration(true)
+                enableLights(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
 
             // Default channel
@@ -72,7 +75,6 @@ class MainActivity : FlutterActivity() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Used for normal notifications"
-               
             }
 
             notificationManager?.createNotificationChannel(emergencyChannel)

@@ -105,6 +105,8 @@ class NotificationService {
 
     showDialog(
       context: navigatorKey.currentContext!,
+      barrierDismissible:
+          false, // Prevent dismissing by tapping outside or back button
       builder: (_) => AlertDialog(
         title: Text(message.notification?.title ?? 'Notification'),
         content: Text(message.notification?.body ?? 'No content'),
@@ -112,6 +114,7 @@ class NotificationService {
           if (!isEmergency)
             TextButton(
               onPressed: () {
+                stopRingtone();
                 Navigator.of(navigatorKey.currentContext!).pop();
                 _navigateToRoute(message, navigatorKey);
               },
@@ -126,10 +129,7 @@ class NotificationService {
           ),
         ],
       ),
-    ).then((_) {
-      // Stop the sound when the dialog is dismissed (user interaction)
-      stopRingtone();
-    });
+    ); // Do not stop sound on dialog dismiss, only on button tap
   }
 
   void _navigateToRoute(
