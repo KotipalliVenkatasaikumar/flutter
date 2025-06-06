@@ -35,6 +35,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
 
   int? _selectedLocationId;
   List<Map<String, dynamic>> _locations = [];
+  CameraLensDirection _currentDirection = CameraLensDirection.back;
 
   @override
   void initState() {
@@ -60,7 +61,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     try {
       final cameras = await availableCameras();
       _camera = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
+        (camera) => camera.lensDirection == _currentDirection,
       );
       _cameraController = CameraController(
         _camera,
@@ -290,6 +291,26 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
 
     await _speak(message);
 
+    // Determine icon and color based on message content
+    IconData dialogIcon;
+    Color dialogColor;
+    String msgLower = message.toLowerCase();
+    if (msgLower.contains('success') || msgLower.contains('successfully')) {
+      dialogIcon = Icons.check_circle;
+      dialogColor = Colors.green;
+    } else if (msgLower.contains('already recorded')) {
+      dialogIcon = Icons.warning;
+      dialogColor = Colors.orange;
+    } else if (msgLower.contains('no login record found') ||
+        msgLower.contains('something went wrong') ||
+        msgLower.contains('failed')) {
+      dialogIcon = Icons.error;
+      dialogColor = Colors.red;
+    } else {
+      dialogIcon = Icons.error;
+      dialogColor = Colors.red;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -304,8 +325,8 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isSuccess ? Icons.check_circle : Icons.error,
-                color: isSuccess ? Colors.green : Colors.red,
+                dialogIcon,
+                color: dialogColor,
                 size: 50,
               ),
               SizedBox(height: 20),
@@ -320,7 +341,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
       ),
     );
 
-    await Future.delayed(Duration(seconds: 6));
+    await Future.delayed(const Duration(seconds: 6));
 
     if (Navigator.canPop(context)) {
       Navigator.pop(context);
@@ -329,7 +350,22 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     setState(() {
       _isDetecting = false;
       _faceDetected = false;
+      _selectedShiftId = null;
+      _selectedLocationId = null;
     });
+  }
+
+  Future<void> _toggleCamera() async {
+    if (_cameraController != null) {
+      await _cameraController!.dispose();
+      _cameraController = null;
+    }
+    setState(() {
+      _currentDirection = _currentDirection == CameraLensDirection.back
+          ? CameraLensDirection.front
+          : CameraLensDirection.back;
+    });
+    await _initializeCamera();
   }
 
   @override
@@ -392,6 +428,16 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
                   children: [
                     _buildCameraPreview(),
                     _buildFaceFrame(),
+                    Positioned(
+                      top: 40,
+                      right: 20,
+                      child: IconButton(
+                        icon: Icon(Icons.switch_camera,
+                            color: Colors.white, size: 32),
+                        onPressed: _toggleCamera,
+                        tooltip: 'Switch Camera',
+                      ),
+                    ),
                   ],
                 ),
     );

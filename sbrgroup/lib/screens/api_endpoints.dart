@@ -36,12 +36,12 @@ class ApiService {
   static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
   static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
 
-  // static const String baseUrl1 = 'https://53bc-49-207-215-77.ngrok-free.app/';
-  // static const String baseUrl2 = 'https://53bc-49-207-215-77.ngrok-free.app/';
-  // static const String baseUrl3 = 'https://53bc-49-207-215-77.ngrok-free.app/';
-  // static const String baseUrl4 = 'https://53bc-49-207-215-77.ngrok-free.app/';
+  // static const String baseUrl1 = 'https://91b7-49-207-209-13.ngrok-free.app/';
+  // static const String baseUrl2 = 'https://91b7-49-207-209-13.ngrok-free.app/';
+  // static const String baseUrl3 = 'https://91b7-49-207-209-13.ngrok-free.app/';
+  // static const String baseUrl4 = 'https://91b7-49-207-209-13.ngrok-free.app/';
   // static const String notificationUrl =
-  //     'https://53bc-49-207-215-77.ngrok-free.app';
+  //     'https://91b7-49-207-209-13.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
@@ -1236,8 +1236,8 @@ class ApiService {
 
   static Future<http.Response> submitRegisterFace(
       String empId, File imageFile, List<double> embeddings) async {
-    final url =
-        Uri.parse('${baseUrl2}api/facility-management/attendance/register');
+    final url = Uri.parse(
+        '${baseUrl2}api/facility-management/shiftBasedAttendance/register');
 
     var request = http.MultipartRequest('POST', url);
 
