@@ -47,6 +47,8 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
   late FaceEmbeddingService _faceEmbeddingService;
   List<double> _generatedEmbeddings = [];
 
+  CameraLensDirection _currentDirection = CameraLensDirection.back;
+
   @override
   void initState() {
     print("11111111111 Model is ready ");
@@ -73,22 +75,39 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
   Future<void> _initializeCamera() async {
     try {
       final cameras = await availableCameras();
-      final frontCamera = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
+      final selectedCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == _currentDirection,
       );
 
       _cameraController = CameraController(
-        frontCamera,
+        selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
       );
 
       _cameraInitFuture = _cameraController!.initialize();
-
-      if (mounted) setState(() {});
+      await _cameraInitFuture; // Wait for initialization to complete
+      if (mounted) setState(() {}); // Force rebuild after camera is ready
     } catch (e) {
       print('Error initializing camera: $e');
     }
+  }
+
+  Future<void> _toggleCamera() async {
+    if (_cameraController != null) {
+      await _cameraController!.dispose();
+      _cameraController = null;
+    }
+    setState(() {
+      _currentDirection = _currentDirection == CameraLensDirection.back
+          ? CameraLensDirection.front
+          : CameraLensDirection.back;
+      _selectedImage = null;
+      _capturedImage = null;
+      _generatedEmbeddings.clear();
+    });
+    await _initializeCamera();
+    // Instead of setState after await, call setState inside _initializeCamera after initialization
   }
 
   Future<void> _captureSelfie() async {
@@ -265,9 +284,22 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return Center(child: CircularProgressIndicator());
     }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: CameraPreview(_cameraController!),
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: CameraPreview(_cameraController!),
+        ),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: IconButton(
+            icon: Icon(Icons.switch_camera, color: Colors.white, size: 28),
+            onPressed: _toggleCamera,
+            tooltip: 'Switch Camera',
+          ),
+        ),
+      ],
     );
   }
 
@@ -280,7 +312,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.of(context).size.height;
+    // final height = MediaQuery.of(context).size.height;
     final width = MediaQuery.of(context).size.width;
 
     return Scaffold(
@@ -290,7 +322,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Face Register',
+              'Face Registration',
               style: TextStyle(
                 fontSize: width > 600 ? 22 : 18,
                 color: Colors.white,
@@ -309,15 +341,24 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(16)),
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text("Select User",
-                        style: Theme.of(context).textTheme.titleMedium),
-                    SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(Icons.person_search, color: Color(0xFF064969)),
+                        SizedBox(width: 8),
+                        Text("Select User",
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    SizedBox(height: 12),
                     DropdownSearch<UserModel>(
                       asyncItems: _searchUsers,
                       itemAsString: (u) => u.userName,
@@ -343,67 +384,105 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
                 ),
               ),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 24),
             if (_selectedUser != null) ...[
-              Text("Camera", style: Theme.of(context).textTheme.titleMedium),
-              SizedBox(height: 10),
-              Container(
-                height: _selectedImage == null ? height * 0.5 : height * 0.4,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: _buildCameraPreview(),
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.all(0), // Remove padding for full view
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.camera_alt, color: Color(0xFF064969)),
+                          SizedBox(width: 8),
+                          Text("Camera",
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      AspectRatio(
+                        aspectRatio: 3 / 4, // Typical camera aspect
+                        child: _buildCameraPreview(),
+                      ),
+                      SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _captureSelfie,
+                              icon: Icon(Icons.camera_alt_outlined),
+                              label: Text('Capture Selfie'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color(0xFF064969),
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _pickImageFromGallery,
+                              icon: Icon(Icons.photo_library_outlined),
+                              label: Text('Gallery'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color(0xFF179E8E),
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _captureSelfie,
-                      icon: Icon(Icons.camera_alt_outlined),
-                      label: Text('Capture Selfie'),
-                      style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _pickImageFromGallery,
-                      icon: Icon(Icons.photo_library_outlined),
-                      label: Text('Select from Gallery'),
-                      style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 20),
+              SizedBox(height: 24),
             ],
             if (_selectedImage != null)
               Card(
                 elevation: 4,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(16)),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(
+                      0), // Remove padding for full preview
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text("Preview",
-                          style: Theme.of(context).textTheme.titleMedium),
-                      SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.file(_selectedImage!,
-                            height: 200, fit: BoxFit.cover),
+                      Row(
+                        children: [
+                          Icon(Icons.image, color: Color(0xFF064969)),
+                          SizedBox(width: 8),
+                          Text("Preview",
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
                       ),
-                      SizedBox(height: 20),
+                      SizedBox(height: 8),
+                      AspectRatio(
+                        aspectRatio: 3 / 4,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(_selectedImage!, fit: BoxFit.cover),
+                        ),
+                      ),
+                      SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -432,7 +511,11 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
                                 )
                               : Text('Upload to Server'),
                           style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(0xFF064969),
+                            foregroundColor: Colors.white,
                             padding: EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
                       ),
