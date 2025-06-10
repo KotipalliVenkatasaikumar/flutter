@@ -1343,4 +1343,19 @@ class ApiService {
     return await getRequest(baseUrl1,
         'api/user/user/fetchall?organizationId=$organizationId&userName=$userName');
   }
+
+  static Future<http.Response> generateAttendanceExcel({
+    required int locationId,
+    required int month,
+    required int year,
+  }) async {
+    final String url =
+        'api/facility-management/shiftBasedAttendance/allAttendance?userName=&userId=70&page=0&size=15&range=0&startDate=&endDate=&attendanceStatus=Logged%20In&shiftIds=0&locationId=$locationId&roleId=0&isExportExcel=true&month=$month&year=$year';
+
+    // If you need headers, add them here
+    // final headers = {'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
+    // return await getRequest(baseUrl2, url, headers: headers);
+
+    return await getRequest(baseUrl2, url);
+  }
 }

@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/screens/attendace/generate_report_screen.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/custom_date_picker.dart';
 import 'package:ajna/screens/util.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
@@ -1431,57 +1432,103 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                       Column(
                         children: [
                           // First Row - Buttons
+                          // ...existing code...
                           Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16.0, vertical: 8.0),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                ElevatedButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      showAttendanceList = true;
-                                      fetchAttendanceDetails('', '');
-                                    });
-                                  },
-                                  child: Text('All Attendance'),
-                                  style: ElevatedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 20, vertical: 12),
-                                    backgroundColor: Colors.blue, // Text color
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        showAttendanceList = true;
+                                        fetchAttendanceDetails('', '');
+                                      });
+                                    },
+                                    child: const Text(
+                                      'All Attendance',
+                                      style: TextStyle(
+                                          fontSize: 12), // Smaller font
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 8), // Less padding
+                                      backgroundColor: Colors.blue,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      minimumSize:
+                                          const Size(0, 36), // Minimum height
                                     ),
                                   ),
                                 ),
-                                const SizedBox(
-                                    width: 8.0), // Space between the buttons
-                                ElevatedButton(
-                                  onPressed: () {
-                                    // showRoleReportPopup(
-                                    //     context, roleReportDetails);
-
-                                    setState(() {
-                                      showAttendanceList = false;
-                                      fetchRoleReport();
-                                    });
-                                  },
-                                  child: Text('Role Report'),
-                                  style: ElevatedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 20, vertical: 12),
-                                    backgroundColor: Colors
-                                        .green, // Use a different color if needed
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                const SizedBox(width: 8.0),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        showAttendanceList = false;
+                                        fetchRoleReport();
+                                      });
+                                    },
+                                    child: const Text(
+                                      'Role Report',
+                                      style: TextStyle(
+                                          fontSize: 12), // Smaller font
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 8), // Less padding
+                                      backgroundColor: Colors.green,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      minimumSize:
+                                          const Size(0, 36), // Minimum height
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8.0),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              GenerateReportScreen(
+                                                  locations: locations),
+                                        ),
+                                      );
+                                    },
+                                    child: const Text(
+                                      'Generate Report',
+                                      style: TextStyle(
+                                          fontSize: 12), // Smaller font
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 8), // Less padding
+                                      backgroundColor: Colors.orange,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      minimumSize:
+                                          const Size(0, 36), // Minimum height
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
+// ...existing code...
 
                           // Second Row - Search Input
                           if (showAttendanceList)
