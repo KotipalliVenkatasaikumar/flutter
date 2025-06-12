@@ -5,6 +5,7 @@ import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class GenerateReportScreen extends StatefulWidget {
   final List locations;
@@ -46,11 +47,12 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
     super.initState();
     final now = DateTime.now();
     years = List.generate(5, (i) => (now.year - i).toString());
-    selectedMonth = months[now.month - 1];
-    selectedYear = now.year.toString();
-    selectedLocation = widget.locations.isNotEmpty
-        ? widget.locations.first.id.toString()
-        : null;
+    selectedMonth = null;
+    selectedYear = null;
+    selectedLocation = null;
+    selectedMonthNumber = null;
+    selectedYearNumber = null;
+    selectedLocationId = null;
   }
 
   @override
@@ -62,6 +64,11 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
         '[32m$selectedYearNumber[0m');
   }
 
+  Future<bool> _requestPermission(Permission permission) async {
+    final status = await permission.request();
+    return true;
+  }
+
   Future<void> generateExcelReport() async {
     print('generateExcelReport called');
     print(
@@ -70,10 +77,41 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
         selectedMonthNumber == null ||
         selectedYearNumber == null) {
       print('Validation failed: One or more fields are null');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please select all fields')),
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Validation Error'),
+          content: const Text('Please select all fields'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
       return;
+    }
+    // Request storage permission on Android before proceeding
+    if (Platform.isAndroid) {
+      bool granted = await _requestPermission(Permission.storage);
+      if (!granted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Permission Required'),
+            content: const Text(
+                'Storage permission is required to save the report.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
     }
     try {
       print('Calling ApiService.generateAttendanceExcel with locationId: '
@@ -90,34 +128,106 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
         final bytes = response.bodyBytes;
         Directory? downloadsDir;
         if (Platform.isAndroid) {
-          try {
-            downloadsDir = Directory('/storage/emulated/0/Download');
-            if (!await downloadsDir.exists()) {
-              downloadsDir = await getExternalStorageDirectory();
-            }
-          } catch (e) {
-            print('Error getting downloads directory: $e');
+          downloadsDir = Directory('/storage/emulated/0/Download');
+          if (!await downloadsDir.exists()) {
             downloadsDir = await getExternalStorageDirectory();
           }
+        } else if (Platform.isIOS) {
+          downloadsDir = await getApplicationDocumentsDirectory();
         } else {
           downloadsDir = await getDownloadsDirectory();
+          // Fallback if getDownloadsDirectory returns null or not writable
+          if (downloadsDir == null || !await downloadsDir.exists()) {
+            downloadsDir = await getApplicationDocumentsDirectory();
+          }
         }
-        final file = File('${downloadsDir!.path}/attendance_report.xlsx');
+        if (downloadsDir == null) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Directory Error'),
+              content: const Text(
+                  'Could not determine a directory to save the file.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
+        // Generate a unique file name using date and time
+        final now = DateTime.now();
+        final safeLocation =
+            selectedLocation?.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_') ??
+                'location';
+        final fileName =
+            'attendance_report_${safeLocation}_${selectedMonth}_${selectedYear}_${now.millisecondsSinceEpoch}.xlsx';
+        final filePath = '${downloadsDir.path}/$fileName';
+        final file = File(filePath);
         await file.writeAsBytes(bytes);
-        print('Excel file written to: \u001b[32m${file.path}\u001b[0m');
-        await OpenFile.open(file.path);
-        print('OpenFile.open called');
+        print('Excel file written to: \u001b[32m$filePath\u001b[0m');
+        final result = await OpenFile.open(filePath);
+        String dialogContent;
+        if (result.type == ResultType.done) {
+          dialogContent = 'Report saved and opened from:\n$filePath';
+        } else {
+          dialogContent =
+              'Report saved to:\n$filePath\n(You can open it now or later.)';
+        }
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Report Saved'),
+            content: Text(dialogContent),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+              // TextButton(
+              //   onPressed: () async {
+              //     Navigator.of(context).pop();
+              //     await OpenFile.open(filePath);
+              //   },
+              //   child: const Text('Open'),
+              // ),
+            ],
+          ),
+        );
       } else {
         print(
-            'Failed to generate Excel report. Status: ${response.statusCode}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate Excel report.')),
+            'Failed to generate Excel report. Status: [32m${response.statusCode}[0m');
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: const Text('Failed to generate Excel report.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         );
       }
     } catch (e) {
       print('Exception in generateExcelReport: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Error'),
+          content: Text('Error: $e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
     }
   }
@@ -128,169 +238,192 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Attendance Report',
-              style: TextStyle(
-                fontSize: screenWidth > 600 ? 22 : 18,
-                color: Colors.white,
-              ),
-            ),
-          ],
+        title: Text(
+          'Attendance Report',
+          style: TextStyle(
+            fontSize: screenWidth > 600 ? 22 : 18,
+            color: Colors.white,
+          ),
         ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 2,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            DropdownButtonFormField2<String>(
-              value: selectedMonth,
-              decoration: InputDecoration(
-                labelText: 'Month',
-                hintText: 'Select Month',
-                prefixIcon: Icon(Icons.calendar_month,
-                    color: Color.fromRGBO(6, 73, 105, 1)),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              items: [
-                DropdownMenuItem(
-                    value: null,
-                    child: Text('Select Month',
-                        style: TextStyle(color: Colors.grey))),
-                ...months
-                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                    .toList(),
-              ],
-              onChanged: (v) {
-                setState(() {
-                  selectedMonth = v;
-                  if (v != null) {
-                    selectedMonthNumber = months.indexOf(v) + 1;
-                  } else {
-                    selectedMonthNumber = null;
-                  }
-                });
-              },
-              dropdownStyleData: DropdownStyleData(
-                maxHeight: 250,
-                width: MediaQuery.of(context).size.width - 40,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12.0),
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            DropdownButtonFormField2<String>(
-              value: selectedYear,
-              decoration: InputDecoration(
-                labelText: 'Year',
-                hintText: 'Select Year',
-                prefixIcon: Icon(Icons.calendar_today,
-                    color: Color.fromRGBO(6, 73, 105, 1)),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              items: [
-                DropdownMenuItem(
-                    value: null,
-                    child: Text('Select Year',
-                        style: TextStyle(color: Colors.grey))),
-                ...years
-                    .map((y) => DropdownMenuItem(value: y, child: Text(y)))
-                    .toList(),
-              ],
-              onChanged: (v) {
-                setState(() {
-                  selectedYear = v;
-                  if (v != null) {
-                    selectedYearNumber = int.tryParse(v);
-                  } else {
-                    selectedYearNumber = null;
-                  }
-                });
-              },
-              dropdownStyleData: DropdownStyleData(
-                maxHeight: 250,
-                width: MediaQuery.of(context).size.width - 40,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12.0),
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            DropdownButtonFormField2<String>(
-              value: selectedLocation,
-              decoration: InputDecoration(
-                labelText: 'Location',
-                hintText: 'Select Location',
-                prefixIcon: Icon(Icons.location_on,
-                    color: Color.fromRGBO(6, 73, 105, 1)),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              items: [
-                DropdownMenuItem(
-                    value: null,
-                    child: Text('Select Location',
-                        style: TextStyle(color: Colors.grey))),
-                ...widget.locations.map<DropdownMenuItem<String>>((loc) {
-                  return DropdownMenuItem(
-                    value: loc.id.toString(),
-                    child: Text(loc.location),
-                  );
-                }).toList(),
-              ],
-              onChanged: (v) {
-                setState(() {
-                  selectedLocation = v;
-                  if (v != null) {
-                    selectedLocationId = int.tryParse(v);
-                  } else {
-                    selectedLocationId = null;
-                  }
-                });
-              },
-              dropdownStyleData: DropdownStyleData(
-                maxHeight: 250,
-                width: MediaQuery.of(context).size.width - 40,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12.0),
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: generateExcelReport,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+      body: Center(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        children: [
+                          DropdownButtonFormField2<String>(
+                            value: selectedMonth,
+                            decoration: InputDecoration(
+                              labelText: 'Month',
+                              prefixIcon: const Icon(Icons.calendar_month,
+                                  color: Color.fromRGBO(6, 73, 105, 1)),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                            ),
+                            hint: const Text('Select Month',
+                                style: TextStyle(color: Colors.grey)),
+                            items: months
+                                .map((m) =>
+                                    DropdownMenuItem(value: m, child: Text(m)))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() {
+                                selectedMonth = v;
+                                selectedMonthNumber =
+                                    v != null ? months.indexOf(v) + 1 : null;
+                              });
+                            },
+                            validator: (v) =>
+                                v == null ? 'Please select a month' : null,
+                            dropdownStyleData: DropdownStyleData(
+                              maxHeight: 250,
+                              width: screenWidth - 80,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12.0),
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField2<String>(
+                            value: selectedYear,
+                            decoration: InputDecoration(
+                              labelText: 'Year',
+                              prefixIcon: const Icon(Icons.calendar_today,
+                                  color: Color.fromRGBO(6, 73, 105, 1)),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                            ),
+                            hint: const Text('Select Year',
+                                style: TextStyle(color: Colors.grey)),
+                            items: years
+                                .map((y) =>
+                                    DropdownMenuItem(value: y, child: Text(y)))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() {
+                                selectedYear = v;
+                                selectedYearNumber =
+                                    v != null ? int.tryParse(v) : null;
+                              });
+                            },
+                            validator: (v) =>
+                                v == null ? 'Please select a year' : null,
+                            dropdownStyleData: DropdownStyleData(
+                              maxHeight: 250,
+                              width: screenWidth - 80,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12.0),
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField2<String>(
+                            value: selectedLocation,
+                            decoration: InputDecoration(
+                              labelText: 'Location',
+                              prefixIcon: const Icon(Icons.location_on,
+                                  color: Color.fromRGBO(6, 73, 105, 1)),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                            ),
+                            hint: const Text('Select Location',
+                                style: TextStyle(color: Colors.grey)),
+                            items: widget.locations
+                                .map<DropdownMenuItem<String>>((loc) {
+                              return DropdownMenuItem(
+                                value: loc.id.toString(),
+                                child: Text(loc.location),
+                              );
+                            }).toList(),
+                            onChanged: (v) {
+                              setState(() {
+                                selectedLocation = v;
+                                selectedLocationId =
+                                    v != null ? int.tryParse(v) : null;
+                              });
+                            },
+                            validator: (v) =>
+                                v == null ? 'Please select a location' : null,
+                            dropdownStyleData: DropdownStyleData(
+                              maxHeight: 250,
+                              width: screenWidth - 80,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12.0),
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                child: const Text('Generate', style: TextStyle(fontSize: 16)),
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.download, color: Colors.white),
+                      label: const Text('Generate Report',
+                          style: TextStyle(fontSize: 18)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 4,
+                      ),
+                      onPressed: () async {
+                        if (selectedMonth == null ||
+                            selectedYear == null ||
+                            selectedLocation == null) {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Validation Error'),
+                              content: const Text(
+                                  'Please select all fields before generating the report.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('OK'),
+                                ),
+                              ],
+                            ),
+                          );
+                          return;
+                        }
+                        await generateExcelReport();
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

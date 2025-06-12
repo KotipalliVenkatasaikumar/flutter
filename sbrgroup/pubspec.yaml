@@ -72,6 +72,9 @@ dependencies:
   google_mlkit_face_detection: ^0.7.0
   android_intent_plus: ^4.0.1
   open_file: ^3.3.2
+  
+  file_picker: ^6.1.1
+  external_path: ^1.0.3
 
 dev_dependencies:
   flutter_test:
