@@ -187,13 +187,13 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('OK'),
               ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await OpenFile.open(filePath);
-                },
-                child: const Text('Open'),
-              ),
+              // TextButton(
+              //   onPressed: () async {
+              //     Navigator.of(context).pop();
+              //     await OpenFile.open(filePath);
+              //   },
+              //   child: const Text('Open'),
+              // ),
             ],
           ),
         );
