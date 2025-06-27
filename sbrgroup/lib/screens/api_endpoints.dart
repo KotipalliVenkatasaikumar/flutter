@@ -1344,18 +1344,38 @@ class ApiService {
         'api/user/user/fetchall?organizationId=$organizationId&userName=$userName');
   }
 
+  static Future<http.Response> fetchUsersForAbsent(
+      String organizationId, String locationId, String userName) async {
+    return await getRequest(baseUrl1,
+        'api/user/user/location/users?organizationId=$organizationId&locationId=$locationId&userName=$userName');
+  }
+
   static Future<http.Response> generateAttendanceExcel({
     required int locationId,
     required int month,
     required int year,
+    required String? selectedStatus,
   }) async {
     final String url =
-        'api/facility-management/shiftBasedAttendance/allAttendance?userName=&userId=70&page=0&size=15&range=0&startDate=&endDate=&attendanceStatus=Logged%20In&shiftIds=0&locationId=$locationId&roleId=0&isExportExcel=true&month=$month&year=$year';
+        'api/facility-management/shiftBasedAttendance/allAttendance?userName=&userId=$userId&page=0&size=15&range=0&startDate=&endDate=&attendanceStatus=$selectedStatus&shiftIds=0&locationId=$locationId&roleId=0&isExportExcel=true&month=$month&year=$year';
 
     // If you need headers, add them here
     // final headers = {'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
     // return await getRequest(baseUrl2, url, headers: headers);
 
     return await getRequest(baseUrl2, url);
+  }
+
+  static Future<http.Response> submitAbsentEmployees({
+    required int shiftId,
+    required int organizationId,
+    required int locationId,
+    required List<int> userIds,
+  }) async {
+    final userIdsParam = userIds.join(',');
+    final String endpoint =
+        'api/facility-management/shiftBasedAttendance/absentemployees?shiftId=$shiftId&organizationId=$organizationId&locationId=$locationId&userId=$userIdsParam';
+    // Use postRequest with an empty body
+    return await postRequest(baseUrl1, endpoint, {});
   }
 }

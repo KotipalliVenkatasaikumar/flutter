@@ -120,3 +120,4 @@ flutter:
     - assets/mobilefacenet.tflite
     - lib/assets/images/registration.png
     - lib/assets/images/recognition.png
+    - lib/assets/images/absent.png
