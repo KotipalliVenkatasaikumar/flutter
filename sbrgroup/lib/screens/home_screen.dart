@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/app_bar.dart';
+import 'package:ajna/screens/attendace/absent_list_screen.dart';
 import 'package:ajna/screens/attendace/attendace_report.dart';
 import 'package:ajna/screens/attendace/fo_attendance.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
@@ -128,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'OT',
     'OT Report',
     'Math Quiz',
+    'Add Absent List',
   };
 
   final List<Map<String, dynamic>> predefinedIcons = [
@@ -320,6 +322,14 @@ class _HomeScreenState extends State<HomeScreen> {
       'label': 'Out Face Recognition',
       'onTap': () => LogOutFaceAttendanceScreen(),
     },
+
+    // {
+    //   //'icon': Icons.bar_chart,
+    //   'icon': null,
+    //   'imagePath': 'lib/assets/images/absent.png',
+    //   'label': 'Add Absent List',
+    //   'onTap': () => AbsentListScreen(),
+    // },
   ];
 
 // Global navigator key for controlling navigation

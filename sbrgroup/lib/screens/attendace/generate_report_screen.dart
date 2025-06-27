@@ -9,7 +9,9 @@ import 'package:permission_handler/permission_handler.dart';
 
 class GenerateReportScreen extends StatefulWidget {
   final List locations;
-  const GenerateReportScreen({Key? key, required this.locations})
+  final String? selectedStatus;
+  const GenerateReportScreen(
+      {Key? key, required this.locations, required this.selectedStatus})
       : super(key: key);
 
   @override
@@ -20,6 +22,8 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
   String? selectedMonth;
   String? selectedYear;
   String? selectedLocation;
+
+  String? selectedStatus;
 
   int? selectedLocationId;
   int? selectedMonthNumber;
@@ -53,6 +57,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
     selectedMonthNumber = null;
     selectedYearNumber = null;
     selectedLocationId = null;
+    selectedStatus = widget.selectedStatus;
   }
 
   @override
@@ -119,10 +124,10 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
           '\u001b[32m$selectedMonthNumber\u001b[0m, year: '
           '\u001b[32m$selectedYearNumber\u001b[0m');
       final response = await ApiService.generateAttendanceExcel(
-        locationId: selectedLocationId!,
-        month: selectedMonthNumber!,
-        year: selectedYearNumber!,
-      );
+          locationId: selectedLocationId!,
+          month: selectedMonthNumber!,
+          year: selectedYearNumber!,
+          selectedStatus: selectedStatus);
       print('API response status: \u001b[32m${response.statusCode}\u001b[0m');
       if (response.statusCode == 200) {
         final bytes = response.bodyBytes;

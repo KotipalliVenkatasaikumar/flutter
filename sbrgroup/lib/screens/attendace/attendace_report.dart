@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/screens/attendace/absent_list_screen.dart';
 import 'package:ajna/screens/attendace/generate_report_screen.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/error_handler.dart';
@@ -1502,7 +1503,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                         MaterialPageRoute(
                                           builder: (context) =>
                                               GenerateReportScreen(
-                                                  locations: locations),
+                                            locations: locations,
+                                            selectedStatus: selectedStatus,
+                                          ),
                                         ),
                                       );
                                     },
@@ -1522,6 +1525,33 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                       ),
                                       minimumSize:
                                           const Size(0, 36), // Minimum height
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8.0),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pushAndRemoveUntil(
+                                        MaterialPageRoute(
+                                            builder: (context) =>
+                                                AbsentListScreen()), // Import HomeScreen if needed
+                                        (route) => false,
+                                      );
+                                    },
+                                    child: const Text(
+                                      'Mark Absent',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 8),
+                                      backgroundColor: Colors.deepPurple,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      minimumSize: const Size(0, 36),
                                     ),
                                   ),
                                 ),
@@ -1709,6 +1739,17 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                                       color: Colors.black54),
                                                 ),
                                               ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // Add shift time display
+                                            Text(
+                                              'Shift Time: ${record.commonRefValue}',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Color.fromARGB(
+                                                    136, 2, 2, 2),
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
                                           ],
                                         ),
