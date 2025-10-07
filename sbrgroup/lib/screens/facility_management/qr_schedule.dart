@@ -5,7 +5,7 @@ import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:install_plugin/install_plugin.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:intl/intl.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
@@ -296,24 +296,8 @@ class _ScanScheduleScreenState extends State<ScanScheduleScreen> {
       setState(() {
         _isDownloading = false;
       });
-
-      if (await Permission.requestInstallPackages.request().isGranted) {
-        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
-            .then((result) {
-          print('Install result: $result');
-          // After installation, navigate back to the login page
-          // Navigator.pushAndRemoveUntil(
-          //   context,
-          //   MaterialPageRoute(builder: (context) => const LoginPage()),
-          //   (Route<dynamic> route) => false,
-          // );
-        }).catchError((error) {
-          print('Install error: $error');
-        });
-      } else {
-        print('Install permission denied.');
-      }
-    } catch (e) {
+      await Util.installApk(savePath);
+    }catch (e) {
       print('Download error: $e');
       setState(() {
         _isDownloading = false;

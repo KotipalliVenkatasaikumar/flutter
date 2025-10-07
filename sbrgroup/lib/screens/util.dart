@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:ajna/screens/api_endpoints.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Util {
@@ -183,5 +184,16 @@ class Util {
       print("Error while deleting device token: $e");
       return false;
     }
+  }
+
+  static Future<void> installApk(String savePath) async {
+    // Launch the APK installer using AndroidIntent
+    final AndroidIntent intent = AndroidIntent(
+      action: 'android.intent.action.VIEW',
+      data: 'file://$savePath',
+      type: 'application/vnd.android.package-archive',
+      flags: [268435456], // FLAG_ACTIVITY_NEW_TASK
+    );
+    await intent.launch();
   }
 }

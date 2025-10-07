@@ -33,7 +33,7 @@ dependencies:
   flutter_dotenv: ^5.0.2
   dio: ^4.0.0
   flutter_downloader: ^1.11.7
-  install_plugin: ^2.0.2
+
   device_info_plus: ^10.1.0
   dropdown_button2: ^2.0.0
   image_picker: ^0.8.7+4
@@ -69,7 +69,7 @@ dependencies:
   tflite_flutter: ^0.9.0
   tflite_flutter_plus: ^0.0.1
   google_fonts: ^6.1.0
-  google_mlkit_face_detection: ^0.7.0
+  # google_mlkit_face_detection: ^0.7.0
   android_intent_plus: ^4.0.1
   open_file: ^3.3.2
   
