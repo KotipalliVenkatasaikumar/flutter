@@ -1235,16 +1235,18 @@ class ApiService {
   }
 
   static Future<http.Response> submitRegisterFace(
-      String empId, File imageFile, List<double> embeddings) async {
+      String empId, File imageFile, 
+      // List<double> embeddings
+      ) async {
     final url = Uri.parse(
         '${baseUrl2}api/facility-management/shiftBasedAttendance/register');
 
     var request = http.MultipartRequest('POST', url);
 
     // Convert list to JSON string
-    String embeddingsJson = jsonEncode(embeddings);
+    // String embeddingsJson = jsonEncode(embeddings);
     request.fields['employeeId'] = empId;
-    request.fields['embeddings'] = embeddingsJson;
+    // request.fields['embeddings'] = embeddingsJson;
 
     if (await imageFile.exists()) {
       final fileExtension = path.extension(imageFile.path).toLowerCase();
@@ -1283,7 +1285,7 @@ class ApiService {
 
   static Future<http.Response> submitCaptureFace({
     required File imageFile,
-    required List<double> embeddings,
+    // required List<double> embeddings,
     required int shiftId,
     required int? organizationId,
     required bool isLogin,
@@ -1297,7 +1299,7 @@ class ApiService {
 
     var request = http.MultipartRequest('POST', url);
 
-    request.fields['embeddings'] = jsonEncode(embeddings);
+    // request.fields['embeddings'] = jsonEncode(embeddings);
     request.fields['shiftId'] = shiftId.toString();
     request.fields['organizationId'] = organizationId.toString();
     request.fields['locationId'] = locationId.toString();

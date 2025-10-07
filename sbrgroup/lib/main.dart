@@ -8,7 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter/services.dart';
-import 'package:install_plugin/install_plugin.dart';
+
 //import 'package:local_auth/local_auth.dart';
 import 'package:logger/logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -281,22 +281,7 @@ class _LoginPageState extends State<LoginPage> {
         _isDownloading = false;
       });
 
-      if (await Permission.requestInstallPackages.request().isGranted) {
-        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
-            .then((result) {
-          print('Install result: $result');
-          // After installation, navigate back to the login page
-          // Navigator.pushAndRemoveUntil(
-          //   context,
-          //   MaterialPageRoute(builder: (context) => const LoginPage()),
-          //   (Route<dynamic> route) => false,
-          // );
-        }).catchError((error) {
-          print('Install error: $error');
-        });
-      } else {
-        print('Install permission denied.');
-      }
+      await Util.installApk(savePath);
     } catch (e) {
       print('Download error: $e');
       setState(() {

@@ -1,14 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:ajna/screens/api_endpoints.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:ajna/screens/face_detection/embedding_service.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 
 class LogOutFaceAttendanceScreen extends StatefulWidget {
@@ -24,8 +25,12 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   bool _isLoading = false;
   bool _isProcessingAPI = false;
 
+  // Countdown state
+  int _countdown = 3;
+  bool _isCountingDown = false;
+  Timer? _countdownTimer;
+
   late CameraDescription _camera;
-  late final FaceDetector _faceDetector;
   late FlutterTts _flutterTts;
   List<double> _generatedEmbeddings = [];
   late FaceEmbeddingService _faceEmbeddingService;
@@ -45,16 +50,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     _flutterTts.setPitch(1.0);
     _flutterTts.setSpeechRate(0.5);
     _initializeModel();
-    _faceDetector = FaceDetector(
-      options: FaceDetectorOptions(
-        enableContours: false,
-        enableClassification: false,
-      ),
-    );
-
     _initializeCamera();
-
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   Future<void> _initializeCamera() async {
@@ -70,7 +66,6 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
       );
       _cameraInitFuture = _cameraController!.initialize().then((_) {
         if (!mounted) return;
-        _cameraController!.startImageStream(_processCameraImage);
         setState(() {});
       });
     } catch (e) {
@@ -103,7 +98,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
           _shifts = data
               .map((shifts) => {
                     'id': shifts['id'],
-                    'commonRefValue': shifts['commonRefValue'],
+                    'refValue': shifts['refValue'] ?? '',
                   })
               .toList();
 
@@ -132,7 +127,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
           _locations = data
               .map((location) => {
                     'id': location['id'],
-                    'location': location['location'],
+                    'location': location['location'] ?? 'Unknown',
                   })
               .toList();
 
@@ -151,57 +146,9 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     await _flutterTts.speak(message);
   }
 
-  Future<void> _processCameraImage(CameraImage image) async {
-    if (_isDetecting ||
-        _faceDetected ||
-        _isLoading ||
-        _isProcessingAPI ||
-        _selectedShiftId == null ||
-        _selectedLocationId == null) return;
-    _isDetecting = true;
 
-    try {
-      final WriteBuffer allBytes = WriteBuffer();
-      for (final Plane plane in image.planes) {
-        allBytes.putUint8List(plane.bytes);
-      }
-      final bytes = allBytes.done().buffer.asUint8List();
 
-      final Size imageSize =
-          Size(image.width.toDouble(), image.height.toDouble());
-      final InputImageFormat inputFormat =
-          InputImageFormatValue.fromRawValue(image.format.raw) ??
-              InputImageFormat.nv21;
-
-      final inputImage = InputImage.fromBytes(
-        bytes: bytes,
-        metadata: InputImageMetadata(
-          size: imageSize,
-          rotation: InputImageRotation.rotation0deg,
-          format: inputFormat,
-          bytesPerRow: image.planes.first.bytesPerRow,
-        ),
-      );
-
-      final faces = await _faceDetector.processImage(inputImage);
-      if (faces.isNotEmpty && !_faceDetected) {
-        setState(() {
-          _faceDetected = true;
-        });
-        _detectFaceAndSendToAPI();
-      } else if (faces.isEmpty && _faceDetected) {
-        setState(() {
-          _faceDetected = false;
-        });
-      }
-    } catch (e) {
-      print("Face detection error: $e");
-    } finally {
-      _isDetecting = false;
-    }
-  }
-
-  Future<void> _detectFaceAndSendToAPI() async {
+  Future<void> _takePictureAndSendToAPI() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized)
       return;
 
@@ -213,14 +160,13 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     try {
       final image = await _cameraController!.takePicture();
       File imageFile = File(image.path);
-      await _generateEmbedding(imageFile);
+      // await _generateEmbedding(imageFile);
       await _sendAttendanceToAPI(imageFile, isLogin: false);
     } catch (e) {
       print("Error taking picture: $e");
     } finally {
       await Future.delayed(Duration(seconds: 2));
       setState(() {
-        _faceDetected = false;
         _isLoading = false;
         _isProcessingAPI = false;
       });
@@ -264,7 +210,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     try {
       final response = await ApiService.submitCaptureFace(
         imageFile: imageFile,
-        embeddings: _generatedEmbeddings,
+        // embeddings: _generatedEmbeddings,
         shiftId: _selectedShiftId!,
         isLogin: isLogin,
         organizationId: _organizationId,
@@ -285,10 +231,6 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   }
 
   Future<void> _showResponseDialog(String message, bool isSuccess) async {
-    setState(() {
-      _isDetecting = true;
-    });
-
     await _speak(message);
 
     // Determine icon and color based on message content
@@ -348,8 +290,6 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     }
 
     setState(() {
-      _isDetecting = false;
-      _faceDetected = false;
       _selectedShiftId = null;
       _selectedLocationId = null;
     });
@@ -370,15 +310,52 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _cameraController?.dispose();
-    _faceDetector.close();
     _flutterTts.stop();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    setState(() {
+      _countdown = 3;
+      _isCountingDown = true;
+    });
+    _countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_countdown == 1) {
+        timer.cancel();
+        setState(() {
+          _isCountingDown = false;
+        });
+        _onCountdownComplete();
+      } else {
+        setState(() {
+          _countdown--;
+        });
+      }
+    });
+  }
+
+  void _onCountdownComplete() async {
+    if (_isLoading || _isProcessingAPI) return;
+    setState(() {
+      _isDetecting = true;
+      _faceDetected = true;
+    });
+    await _takePictureAndSendToAPI();
+    setState(() {
+      _isDetecting = false;
+      _faceDetected = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
+    final height = MediaQuery.of(context).size.height;
+    final loadingFontSize = width > 500 ? 20.0 : 16.0;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
@@ -397,49 +374,30 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: _isLoading
-          ? _buildLoadingOverlay()
-          : (_selectedShiftId == null || _selectedLocationId == null)
-              ? SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      _buildShiftDropdown(),
-                      _buildLocationDropdown(),
-                      const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (_selectedShiftId != null &&
-                              _selectedLocationId != null) {
-                            setState(() {}); // trigger camera view
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
-                        ),
-                        child: const Text(
-                          'Continue',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
+      body: (_selectedShiftId == null || _selectedLocationId == null)
+          ? Column(
+                children: [
+                  _buildShiftDropdown(),
+                  _buildLocationDropdown(),
+                ],
+              )
+          : Stack(
+              children: [
+                _buildCameraPreview(),
+                if (_isCountingDown) _buildCountdownOverlay(width, height),
+                if (_isLoading) _buildLoadingOverlay(loadingFontSize),
+                Positioned(
+                  top: 40,
+                  right: 20,
+                  child: IconButton(
+                    icon: Icon(Icons.switch_camera,
+                        color: Colors.white, size: 32),
+                    onPressed: _toggleCamera,
+                    tooltip: 'Switch Camera',
                   ),
-                )
-              : Stack(
-                  children: [
-                    _buildCameraPreview(),
-                    _buildFaceFrame(),
-                    Positioned(
-                      top: 40,
-                      right: 20,
-                      child: IconButton(
-                        icon: Icon(Icons.switch_camera,
-                            color: Colors.white, size: 32),
-                        onPressed: _toggleCamera,
-                        tooltip: 'Switch Camera',
-                      ),
-                    ),
-                  ],
                 ),
+              ],
+            ),
     );
   }
 
@@ -447,29 +405,94 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return const Center(child: CircularProgressIndicator());
     }
-    return SizedBox.expand(
-      child: CameraPreview(_cameraController!),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+        final frameWidth = width * 0.7;
+        final frameHeight = height * 0.5;
+        return Center(
+          child: SizedBox(
+            width: frameWidth,
+            height: frameHeight,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ClipOval(
+                  child: SizedBox(
+                    width: frameWidth,
+                    height: frameHeight,
+                    child: CameraPreview(_cameraController!),
+                  ),
+                ),
+                IgnorePointer(
+                  child: Container(
+                    width: frameWidth,
+                    height: frameHeight,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.greenAccent, width: 3),
+                      borderRadius: BorderRadius.all(
+                        Radius.elliptical(frameWidth / 2, frameHeight / 2),
+                      ),
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: Center(
+                    child: Text(
+                      "Align your face here",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: width > 500 ? 18.0 : 14.0,
+                        shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildFaceFrame() {
-    return Align(
-      alignment: Alignment.center,
-      child: ClipOval(
-        child: Container(
-          width: 250,
-          height: 350,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.greenAccent, width: 3),
-            color: Colors.transparent,
+
+
+  Widget _buildCountdownOverlay(double width, double height) {
+    return Container(
+      width: width,
+      height: height,
+      color: Colors.black45,
+      child: Center(
+        child: Text(
+          '$_countdown',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: width > 500 ? 80 : 48,
+            fontWeight: FontWeight.bold,
+            shadows: [Shadow(blurRadius: 8, color: Colors.black)],
           ),
-          child: const Center(
-            child: Text(
-              "Align your face here",
-              style: TextStyle(color: Colors.white, fontSize: 14),
-              textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay(double fontSize) {
+    return Container(
+      color: Colors.black54,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 16),
+            Text(
+              "Processing Attendance...",
+              style: TextStyle(color: Colors.white, fontSize: fontSize),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -478,51 +501,73 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   Widget _buildShiftDropdown() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: DropdownButtonFormField<int>(
-        decoration: InputDecoration(
-          labelText: 'Select Shift',
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderSide: const BorderSide(
-              color: Color.fromARGB(255, 41, 221, 200),
-              width: 1.0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.3),
+              spreadRadius: 2,
+              blurRadius: 5,
+              offset: const Offset(0, 3),
             ),
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderSide: const BorderSide(
-              color: Color.fromARGB(255, 23, 158, 142),
-              width: 2.0,
+          ],
+        ),
+        child: DropdownButtonFormField2<int>(
+          decoration: InputDecoration(
+            labelText: 'Select Shift',
+            prefixIcon: Icon(Icons.schedule, color: Color.fromARGB(255, 41, 221, 200)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8.0),
             ),
-            borderRadius: BorderRadius.circular(8.0),
+            enabledBorder: OutlineInputBorder(
+              borderSide: const BorderSide(
+                  color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: const BorderSide(
+                  color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+          ),
+          value: _selectedShiftId,
+          items: _shifts.map((shift) {
+            return DropdownMenuItem<int>(
+              value: shift['id'],
+              child: Text(
+                shift['refValue'] ?? 'Unknown Shift',
+                style: TextStyle(
+                  fontSize: MediaQuery.of(context).size.width > 500 ? 18 : 16,
+                  color: Color.fromARGB(255, 80, 79, 79),
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedShiftId = value;
+            });
+            if (_selectedShiftId != null && _selectedLocationId != null && _cameraController != null && _cameraController!.value.isInitialized) {
+              _startCountdown();
+            }
+          },
+          validator: (value) {
+            if (value == null) {
+              return 'Please select a shift';
+            }
+            return null;
+          },
+          isExpanded: true,
+          dropdownStyleData: DropdownStyleData(
+            maxHeight: 300,
+            width: MediaQuery.of(context).size.width - 32,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8.0),
+            ),
           ),
         ),
-        value: _selectedShiftId,
-        items: _shifts.map((shift) {
-          return DropdownMenuItem<int>(
-            value: shift['id'],
-            child: Text(
-              shift['commonRefValue'],
-              style: const TextStyle(
-                fontSize: 16,
-                color: Color.fromARGB(255, 80, 79, 79),
-              ),
-            ),
-          );
-        }).toList(),
-        onChanged: (value) {
-          setState(() {
-            _selectedShiftId = value;
-          });
-        },
-        validator: (value) {
-          if (value == null) {
-            return 'Please select a shift';
-          }
-          return null;
-        },
       ),
     );
   }
@@ -530,71 +575,76 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   Widget _buildLocationDropdown() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: DropdownButtonFormField<int>(
-        decoration: InputDecoration(
-          labelText: 'Select Location',
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderSide: const BorderSide(
-              color: Color.fromARGB(255, 41, 221, 200),
-              width: 1.0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.3),
+              spreadRadius: 2,
+              blurRadius: 5,
+              offset: const Offset(0, 3),
             ),
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderSide: const BorderSide(
-              color: Color.fromARGB(255, 23, 158, 142),
-              width: 2.0,
+          ],
+        ),
+        child: DropdownButtonFormField2<int>(
+          decoration: InputDecoration(
+            labelText: 'Select Location',
+            prefixIcon: Icon(Icons.location_on, color: Color.fromARGB(255, 41, 221, 200)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8.0),
             ),
-            borderRadius: BorderRadius.circular(8.0),
+            enabledBorder: OutlineInputBorder(
+              borderSide: const BorderSide(
+                  color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: const BorderSide(
+                  color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+          ),
+          value: _selectedLocationId,
+          items: _locations.map((location) {
+            return DropdownMenuItem<int>(
+              value: location['id'],
+              child: Text(
+                location['location'] ?? 'Unknown Location',
+                style: TextStyle(
+                  fontSize: MediaQuery.of(context).size.width > 500 ? 18 : 16,
+                  color: Color.fromARGB(255, 80, 79, 79),
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedLocationId = value;
+            });
+            if (_selectedShiftId != null && _selectedLocationId != null && _cameraController != null && _cameraController!.value.isInitialized) {
+              _startCountdown();
+            }
+          },
+          validator: (value) {
+            if (value == null) {
+              return 'Please select a location';
+            }
+            return null;
+          },
+          isExpanded: true,
+          dropdownStyleData: DropdownStyleData(
+            maxHeight: 300,
+            width: MediaQuery.of(context).size.width - 32,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8.0),
+            ),
           ),
         ),
-        value: _selectedLocationId,
-        items: _locations.map((location) {
-          return DropdownMenuItem<int>(
-            value: location['id'],
-            child: Text(
-              location['location'],
-              style: const TextStyle(
-                fontSize: 16,
-                color: Color.fromARGB(255, 80, 79, 79),
-              ),
-            ),
-          );
-        }).toList(),
-        onChanged: (value) {
-          setState(() {
-            _selectedLocationId = value;
-          });
-        },
-        validator: (value) {
-          if (value == null) {
-            return 'Please select a location';
-          }
-          return null;
-        },
       ),
     );
   }
 
-  Widget _buildLoadingOverlay() {
-    return Container(
-      color: Colors.black54,
-      child: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 16),
-            Text(
-              "Processing Attendance...",
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 }

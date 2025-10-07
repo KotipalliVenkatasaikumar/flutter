@@ -8,7 +8,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
-import 'package:install_plugin/install_plugin.dart';
+
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -361,22 +361,7 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
         _isDownloading = false;
       });
 
-      if (await Permission.requestInstallPackages.request().isGranted) {
-        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
-            .then((result) {
-          print('Install result: $result');
-          // After installation, navigate back to the login page
-          // Navigator.pushAndRemoveUntil(
-          //   context,
-          //   MaterialPageRoute(builder: (context) => const LoginPage()),
-          //   (Route<dynamic> route) => false,
-          // );
-        }).catchError((error) {
-          print('Install error: $error');
-        });
-      } else {
-        print('Install permission denied.');
-      }
+      await Util.installApk(savePath);
     } catch (e) {
       print('Download error: $e');
       setState(() {

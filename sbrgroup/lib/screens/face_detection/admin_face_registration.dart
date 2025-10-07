@@ -3,13 +3,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ajna/screens/api_endpoints.dart';
-import 'package:ajna/screens/face_detection/embedding_service.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:camera/camera.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+
+import 'package:permission_handler/permission_handler.dart';
 
 class UserModel {
   final int userId;
@@ -25,13 +27,15 @@ class UserModel {
   }
 }
 
+
 class AdminFaceRegisterScreen extends StatefulWidget {
   @override
   _AdminFaceRegisterScreenState createState() =>
       _AdminFaceRegisterScreenState();
 }
 
-class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
+class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> with WidgetsBindingObserver {
+  final ScrollController _dropdownScrollController = ScrollController();
   CameraController? _cameraController;
   Future<void>? _cameraInitFuture;
   XFile? _capturedImage;
@@ -44,32 +48,51 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
   final ImagePicker _picker = ImagePicker();
 
   int? orgId;
-  late FaceEmbeddingService _faceEmbeddingService;
-  List<double> _generatedEmbeddings = [];
+  // late FaceEmbeddingService _faceEmbeddingService;
+  // List<double> _generatedEmbeddings = [];
 
   CameraLensDirection _currentDirection = CameraLensDirection.back;
 
   @override
   void initState() {
-    print("11111111111 Model is ready ");
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    print("11111111111 Model is ready ");
     print("222222222222222222222222222222222222 Model is ready ");
-    _initializeModel();
+    // _initializeModel();
     print("33333333333333333333333333333 Model is ready ");
     _setup();
     print("4444444444444444444444444444 Model is ready ");
   }
 
-  Future<void> _initializeModel() async {
-    print("Initializing model...");
-    _faceEmbeddingService = FaceEmbeddingService();
-    await _faceEmbeddingService.init();
-    print("Model ready: ${_faceEmbeddingService.isReady}");
-  }
+  // Future<void> _initializeModel() async {
+  //   print("Initializing model...");
+  //   _faceEmbeddingService = FaceEmbeddingService();
+  //   await _faceEmbeddingService.init();
+  //   print("Model ready: ${_faceEmbeddingService.isReady}");
+  // }
 
   Future<void> _setup() async {
     orgId = await Util.getOrganizationId();
+    final hasPermission = await _ensureCameraPermission();
+    if (!hasPermission) {
+      return;
+    }
     await _initializeCamera();
+  }
+
+  Future<bool> _ensureCameraPermission() async {
+    final status = await Permission.camera.request();
+    if (status.isGranted) {
+      return true;
+    }
+    if (status.isPermanentlyDenied) {
+      await _showSettingsDialog(
+        'Camera Permission Permanently Denied',
+        'Please grant camera permission in your device settings to use this feature.',
+      );
+    }
+    return false;
   }
 
   Future<void> _initializeCamera() async {
@@ -104,7 +127,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
           : CameraLensDirection.back;
       _selectedImage = null;
       _capturedImage = null;
-      _generatedEmbeddings.clear();
+      // _generatedEmbeddings.clear();
     });
     await _initializeCamera();
     // Instead of setState after await, call setState inside _initializeCamera after initialization
@@ -132,9 +155,9 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
       setState(() {
         _selectedImage = correctedFile;
         _capturedImage = image;
-        _generatedEmbeddings.clear();
+        // _generatedEmbeddings.clear();
       });
-      await _generateEmbedding(_selectedImage!);
+      // await _generateEmbedding(_selectedImage!);
     } catch (e) {
       print("Capture error: $e");
     } finally {
@@ -144,56 +167,75 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
 
   Future<void> _pickImageFromGallery() async {
     try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        requestFullMetadata: false, // Important for Android 13+ scoped storage
+      );
+      
       if (picked != null) {
         setState(() {
           _capturedImage = null;
           _selectedImage = File(picked.path);
-          _generatedEmbeddings.clear();
         });
-        await _generateEmbedding(_selectedImage!);
+      }
+    } on PlatformException catch (e) {
+      if (e.code == 'photo_access_denied') {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Photo access permission denied')),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to pick image: ${e.message}')),
+          );
+        }
       }
     } catch (e) {
-      print('Gallery pick error: $e');
-    }
-  }
-
-  Future<void> _generateEmbedding(File imageFile) async {
-    if (!_faceEmbeddingService.isReady) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Model not loaded yet.")),
-      );
-      return;
-    }
-
-    try {
-      final img.Image image = img.decodeImage(await imageFile.readAsBytes())!;
-      final List<double> embeddings =
-          await _faceEmbeddingService.getEmbedding(image);
-
-      setState(() {
-        _generatedEmbeddings = embeddings;
-      });
-
-      print('Embedding result: $_generatedEmbeddings');
-
-      if (_generatedEmbeddings.every((e) => e == 0.0)) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('⚠️ Embedding is all zeros!')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
-    } catch (e) {
-      print('Error during embedding: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Failed to generate embedding.')),
-      );
     }
   }
+
+  // Future<void> _generateEmbedding(File imageFile) async {
+  //   if (!_faceEmbeddingService.isReady) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text("Model not loaded yet.")),
+  //     );
+  //     return;
+  //   }
+
+  //   try {
+  //     final img.Image image = img.decodeImage(await imageFile.readAsBytes())!;
+  //     final List<double> embeddings =
+  //         await _faceEmbeddingService.getEmbedding(image);
+
+  //     setState(() {
+  //       _generatedEmbeddings = embeddings;
+  //     });
+
+  //     print('Embedding result: $_generatedEmbeddings');
+
+  //     if (_generatedEmbeddings.every((e) => e == 0.0)) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text('⚠️ Embedding is all zeros!')),
+  //       );
+  //     }
+  //   } catch (e) {
+  //     print('Error during embedding: $e');
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('❌ Failed to generate embedding.')),
+  //     );
+  //   }
+  // }
 
   Future<void> _uploadImage() async {
     if (_selectedImage == null ||
-        _selectedUser == null ||
-        _generatedEmbeddings.isEmpty) {
+        _selectedUser == null ) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text('Please select a user and capture/select an image.')),
@@ -207,7 +249,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
       final response = await ApiService.submitRegisterFace(
         _selectedUser!.userId.toString(),
         _selectedImage!,
-        _generatedEmbeddings,
+        // _generatedEmbeddings,
       );
 
       if (response.statusCode == 200) {
@@ -224,7 +266,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
                     _capturedImage = null;
                     _selectedImage = null;
                     _selectedUser = null;
-                    _generatedEmbeddings.clear();
+                    // _generatedEmbeddings.clear();
                   });
                 },
                 child: Text('OK'),
@@ -294,7 +336,8 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
           top: 8,
           right: 8,
           child: IconButton(
-            icon: Icon(Icons.switch_camera, color: Colors.white, size: 28),
+            icon: Icon(Icons.switch_camera,
+                color: const Color.fromARGB(255, 255, 255, 255), size: 28),
             onPressed: _toggleCamera,
             tooltip: 'Switch Camera',
           ),
@@ -303,16 +346,190 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
     );
   }
 
+  Widget _buildPreviewArea(double width) {
+    final aspectRatio = 3 / 4;
+    final previewHeight = width / aspectRatio;
+    final isPreview = _selectedImage != null;
+
+    return Column(
+      children: [
+        Container(
+          width: width,
+          height: previewHeight,
+          child: isPreview
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(_selectedImage!,
+                      fit: BoxFit.cover, width: width, height: previewHeight),
+                )
+              : (_cameraController == null ||
+                      !_cameraController!.value.isInitialized)
+                  ? Center(child: CircularProgressIndicator())
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: CameraPreview(_cameraController!),
+                    ),
+        ),
+        SizedBox(height: 12),
+        _buildBottomBar(context),
+      ],
+    );
+  }
+
+  Widget _buildBottomBar(BuildContext context) {
+    final isPreview = _selectedImage != null;
+    final width = MediaQuery.of(context).size.width;
+    final isNarrow = width < 350;
+
+    if (!isPreview) {
+      // Camera mode
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Material(
+                color: Color(0xFF064969).withOpacity(0.85),
+                shape: CircleBorder(),
+                child: IconButton(
+                  icon: Icon(Icons.switch_camera,
+                      size: isNarrow ? 22 : 28, color: Colors.white),
+                  onPressed: _toggleCamera,
+                  tooltip: 'Switch Camera',
+                  iconSize: isNarrow ? 36 : 48,
+                  padding: EdgeInsets.all(isNarrow ? 8 : 12),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: ElevatedButton(
+                onPressed: _captureSelfie,
+                style: ElevatedButton.styleFrom(
+                  shape: CircleBorder(),
+                  padding: EdgeInsets.all(isNarrow ? 10 : 18),
+                  backgroundColor: Color(0xFF179E8E),
+                  foregroundColor: Colors.white,
+                  elevation: 6,
+                  minimumSize: Size(isNarrow ? 44 : 56, isNarrow ? 44 : 56),
+                ),
+                child: Icon(Icons.camera_alt, size: isNarrow ? 26 : 32),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Material(
+                color: Color(0xFF6C63FF).withOpacity(0.85),
+                shape: CircleBorder(),
+                child: IconButton(
+                  icon: Icon(Icons.photo_library,
+                      size: isNarrow ? 22 : 28, color: Colors.white),
+                  onPressed: _pickImageFromGallery,
+                  tooltip: 'Pick from Gallery',
+                  iconSize: isNarrow ? 36 : 48,
+                  padding: EdgeInsets.all(isNarrow ? 8 : 12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Preview mode
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _selectedImage = null;
+                    _capturedImage = null;
+                    // _generatedEmbeddings.clear();
+                  });
+                },
+                icon: Icon(Icons.refresh,
+                    color: Colors.white, size: isNarrow ? 20 : 24),
+                label: Text('Retake',
+                    style: TextStyle(
+                        color: Colors.white, fontSize: isNarrow ? 13 : 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24)),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 10 : 28,
+                      vertical: isNarrow ? 8 : 14),
+                  minimumSize: Size(isNarrow ? 44 : 56, isNarrow ? 44 : 56),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: ElevatedButton.icon(
+                onPressed: _isUploading || _selectedImage == null || _selectedUser == null
+                    ? null
+                    : _uploadImage,
+                icon: _isUploading
+                    ? SizedBox(
+                        width: isNarrow ? 14 : 18,
+                        height: isNarrow ? 14 : 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Icon(Icons.upload,
+                        color: Colors.white, size: isNarrow ? 20 : 24),
+                label: Text(_isUploading ? 'Uploading...' : 'Upload',
+                    style: TextStyle(
+                        color: Colors.white, fontSize: isNarrow ? 13 : 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF064969),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24)),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 10 : 28,
+                      vertical: isNarrow ? 8 : 14),
+                  minimumSize: Size(isNarrow ? 44 : 56, isNarrow ? 44 : 56),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
-    _faceEmbeddingService.dispose();
+    // _faceEmbeddingService.dispose();
     super.dispose();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Re-check permission and re-init camera on resume
+      _setup();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // final height = MediaQuery.of(context).size.height;
     final width = MediaQuery.of(context).size.width;
 
     return Scaffold(
@@ -386,145 +603,34 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> {
             ),
             SizedBox(height: 24),
             if (_selectedUser != null) ...[
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.all(0), // Remove padding for full view
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.camera_alt, color: Color(0xFF064969)),
-                          SizedBox(width: 8),
-                          Text("Camera",
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-                      AspectRatio(
-                        aspectRatio: 3 / 4, // Typical camera aspect
-                        child: _buildCameraPreview(),
-                      ),
-                      SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _captureSelfie,
-                              icon: Icon(Icons.camera_alt_outlined),
-                              label: Text('Capture Selfie'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF064969),
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _pickImageFromGallery,
-                              icon: Icon(Icons.photo_library_outlined),
-                              label: Text('Gallery'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF179E8E),
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              _buildPreviewArea(width),
               SizedBox(height: 24),
             ],
-            if (_selectedImage != null)
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(
-                      0), // Remove padding for full preview
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.image, color: Color(0xFF064969)),
-                          SizedBox(width: 8),
-                          Text("Preview",
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-                      AspectRatio(
-                        aspectRatio: 3 / 4,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_selectedImage!, fit: BoxFit.cover),
-                        ),
-                      ),
-                      SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              _isUploading || _generatedEmbeddings.isEmpty
-                                  ? null
-                                  : _uploadImage,
-                          icon: Icon(Icons.upload),
-                          label: _isUploading
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    SizedBox(
-                                      height: 18,
-                                      width: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
-                                      ),
-                                    ),
-                                    SizedBox(width: 10),
-                                    Text('Uploading...'),
-                                  ],
-                                )
-                              : Text('Upload to Server'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF064969),
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showSettingsDialog(String title, String content) async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await openAppSettings();
+              if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+            },
+            child: const Text('Open Settings'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }

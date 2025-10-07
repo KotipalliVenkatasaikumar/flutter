@@ -9,7 +9,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:install_plugin/install_plugin.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -371,22 +371,7 @@ class _OtScreenState extends State<OtScreen> {
         _isDownloading = false;
       });
 
-      if (await Permission.requestInstallPackages.request().isGranted) {
-        InstallPlugin.installApk(savePath, appId: 'com.example.ajna')
-            .then((result) {
-          print('Install result: $result');
-          // After installation, navigate back to the login page
-          // Navigator.pushAndRemoveUntil(
-          //   context,
-          //   MaterialPageRoute(builder: (context) => const LoginPage()),
-          //   (Route<dynamic> route) => false,
-          // );
-        }).catchError((error) {
-          print('Install error: $error');
-        });
-      } else {
-        print('Install permission denied.');
-      }
+    await Util.installApk(savePath);
     } catch (e) {
       print('Download error: $e');
       setState(() {
