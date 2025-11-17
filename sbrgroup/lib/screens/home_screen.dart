@@ -7,6 +7,7 @@ import 'package:ajna/screens/app_bar.dart';
 import 'package:ajna/screens/attendace/absent_list_screen.dart';
 import 'package:ajna/screens/attendace/attendace_report.dart';
 import 'package:ajna/screens/attendace/fo_attendance.dart';
+import 'package:ajna/screens/attendance/attendance_dashboard.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/crm/crm_home_screen.dart';
 import 'package:ajna/screens/crm/raise-issue.dart';
@@ -95,6 +96,9 @@ class IconButtonWidget extends StatelessWidget {
           Text(
             label,
             style: TextStyle(fontSize: textSize), // Use dynamic text size
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -130,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'OT Report',
     'Math Quiz',
     'Add Absent List',
+    'Facial Attendance',
   };
 
   final List<Map<String, dynamic>> predefinedIcons = [
@@ -312,16 +317,16 @@ class _HomeScreenState extends State<HomeScreen> {
       //'icon': Icons.bar_chart,
       'icon': null,
       'imagePath': 'lib/assets/images/recognition.png',
-      'label': 'In Face Recognition',
-      'onTap': () => FaceAttendanceScreen(),
+      'label': 'Facial Attendance',
+      'onTap': () => AttendanceDashboardScreen(),
     },
-    {
-      //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/recognition.png',
-      'label': 'Out Face Recognition',
-      'onTap': () => LogOutFaceAttendanceScreen(),
-    },
+    // {
+    //   //'icon': Icons.bar_chart,
+    //   'icon': null,
+    //   'imagePath': 'lib/assets/images/recognition.png',
+    //   'label': 'Out Face Recognition',
+    //   'onTap': () => LogOutFaceAttendanceScreen(),
+    // },
 
     // {
     //   //'icon': Icons.bar_chart,

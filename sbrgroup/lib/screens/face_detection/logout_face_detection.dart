@@ -10,7 +10,10 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image/image.dart' as img;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LogOutFaceAttendanceScreen extends StatefulWidget {
   @override
@@ -24,6 +27,9 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   bool _faceDetected = false;
   bool _isLoading = false;
   bool _isProcessingAPI = false;
+
+  double currentLatitude = 0.0;
+  double currentLongitude = 0.0;
 
   // Countdown state
   int _countdown = 3;
@@ -39,8 +45,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   int? _organizationId;
 
   int? _selectedLocationId;
-  List<Map<String, dynamic>> _locations = [];
-  CameraLensDirection _currentDirection = CameraLensDirection.back;
+  CameraLensDirection _currentDirection = CameraLensDirection.front;
 
   @override
   void initState() {
@@ -75,8 +80,17 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
 
   Future<void> _initializeModel() async {
     _organizationId = await Util.getOrganizationId();
+    final prefs = await SharedPreferences.getInstance();
+    _selectedLocationId = prefs.getInt('selectedProjectId');
+    if (_selectedLocationId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please select a project first.')),
+      );
+      Navigator.pop(context);
+      return;
+    }
     fetchShiftData();
-    fetchLocationData(_organizationId);
+    await _handleQrCodeScanned();
     print("Initializing model...");
     _faceEmbeddingService = FaceEmbeddingService();
     await _faceEmbeddingService.init();
@@ -112,39 +126,125 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     }
   }
 
-  Future<void> fetchLocationData(int? organizationId) async {
-    setState(() {
-      _isLoading = true; // Start loading
-    });
-
-    try {
-      final response = await ApiService.fetchLocation(organizationId);
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-
-        setState(() {
-          _locations = data
-              .map((location) => {
-                    'id': location['id'],
-                    'location': location['location'] ?? 'Unknown',
-                  })
-              .toList();
-
-          _isLoading = false; // Stop loading
-        });
-      }
-    } catch (error) {
-      setState(() {
-        _isLoading = false; // Stop loading
-      });
-    }
-  }
 
   Future<void> _speak(String message) async {
     await _flutterTts.stop();
     await _flutterTts.speak(message);
   }
+
+   Future<void> _handleQrCodeScanned() async {
+    try {
+      Position position = await _getCurrentPosition(context);
+      currentLatitude = position.latitude;
+      currentLongitude = position.longitude;
+      setState(() {});
+    } catch (e) {
+      print('Error parsing QR code data: $e');
+    }
+  }
+
+
+  Future<Position> _getCurrentPosition(BuildContext context) async {
+    bool serviceEnabled;
+    LocationPermission permission;
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      // Open system Location Services settings (iOS opens Settings > Privacy > Location Services)
+      await Geolocator.openLocationSettings();
+      await Future.delayed(const Duration(seconds: 2));
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        await _showDialog(
+          context,
+          'Location services are disabled',
+          'Please enable location services in your device settings.',
+          // Always show settings for location service disabled
+          forceShowSettings: true,
+        );
+        throw 'Location services are disabled.';
+      }
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        await _showDialog(
+          context,
+          'Location permissions denied',
+          'Please grant location permissions in your device settings.',
+          forceShowSettings: true,
+        );
+        throw 'Location permissions are denied.';
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      await _showDialog(
+        context,
+        'Location permissions permanently denied',
+        'Please enable location permissions manually in your device settings.',
+        forceShowSettings: true,
+      );
+      throw 'Location permissions are permanently denied.';
+    }
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      return position;
+    } catch (e) {
+      print('Error fetching location: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error fetching location')),
+        );
+      }
+      throw 'Error fetching location';
+    }
+  }
+
+
+
+   Future<void> _showDialog(
+    BuildContext context,
+    String title,
+    String content,
+    {bool forceShowSettings = false}
+  ) async {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final bool showSettings = forceShowSettings || title.toLowerCase().contains('denied');
+        return AlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: <Widget>[
+            if (showSettings)
+              TextButton(
+                child: const Text('Open Settings'),
+                onPressed: () async {
+                  await openAppSettings();
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            TextButton(
+              child: const Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
 
 
 
@@ -215,6 +315,8 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
         isLogin: isLogin,
         organizationId: _organizationId,
         locationId: _selectedLocationId,
+        latitude: currentLatitude,
+        longitude: currentLongitude,
       );
 
       String message = response.body.toString();
@@ -291,13 +393,16 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
 
     setState(() {
       _selectedShiftId = null;
-      _selectedLocationId = null;
     });
   }
 
   Future<void> _toggleCamera() async {
     if (_cameraController != null) {
-      await _cameraController!.dispose();
+      try {
+        await _cameraController!.dispose();
+      } catch (e) {
+        print('Error disposing camera: $e');
+      }
       _cameraController = null;
     }
     setState(() {
@@ -374,11 +479,10 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: (_selectedShiftId == null || _selectedLocationId == null)
+      body: (_selectedShiftId == null)
           ? Column(
                 children: [
                   _buildShiftDropdown(),
-                  _buildLocationDropdown(),
                 ],
               )
           : Stack(
@@ -549,7 +653,7 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
             setState(() {
               _selectedShiftId = value;
             });
-            if (_selectedShiftId != null && _selectedLocationId != null && _cameraController != null && _cameraController!.value.isInitialized) {
+            if (_selectedShiftId != null && _cameraController != null && _cameraController!.value.isInitialized) {
               _startCountdown();
             }
           },
@@ -572,79 +676,6 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     );
   }
 
-  Widget _buildLocationDropdown() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12.0),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.3),
-              spreadRadius: 2,
-              blurRadius: 5,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: DropdownButtonFormField2<int>(
-          decoration: InputDecoration(
-            labelText: 'Select Location',
-            prefixIcon: Icon(Icons.location_on, color: Color.fromARGB(255, 41, 221, 200)),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderSide: const BorderSide(
-                  color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: const BorderSide(
-                  color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-          ),
-          value: _selectedLocationId,
-          items: _locations.map((location) {
-            return DropdownMenuItem<int>(
-              value: location['id'],
-              child: Text(
-                location['location'] ?? 'Unknown Location',
-                style: TextStyle(
-                  fontSize: MediaQuery.of(context).size.width > 500 ? 18 : 16,
-                  color: Color.fromARGB(255, 80, 79, 79),
-                ),
-              ),
-            );
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedLocationId = value;
-            });
-            if (_selectedShiftId != null && _selectedLocationId != null && _cameraController != null && _cameraController!.value.isInitialized) {
-              _startCountdown();
-            }
-          },
-          validator: (value) {
-            if (value == null) {
-              return 'Please select a location';
-            }
-            return null;
-          },
-          isExpanded: true,
-          dropdownStyleData: DropdownStyleData(
-            maxHeight: 300,
-            width: MediaQuery.of(context).size.width - 32,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
 
 }
