@@ -30,18 +30,18 @@ class ApiService {
   // static const String baseUrl4 = 'http://65.2.49.230:1093/';
   // static const String notificationUrl = 'http://65.2.49.230:1093';
 
-  static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
-  static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
-  static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
-  static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
-  static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
+  // static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
+  // static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
+  // static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
+  // static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
+  // static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
 
-  // static const String baseUrl1 = 'https://91b7-49-207-209-13.ngrok-free.app/';
-  // static const String baseUrl2 = 'https://91b7-49-207-209-13.ngrok-free.app/';
-  // static const String baseUrl3 = 'https://91b7-49-207-209-13.ngrok-free.app/';
-  // static const String baseUrl4 = 'https://91b7-49-207-209-13.ngrok-free.app/';
-  // static const String notificationUrl =
-  //     'https://91b7-49-207-209-13.ngrok-free.app';
+  static const String baseUrl1 = 'https://ad776369d415.ngrok-free.app/';
+  static const String baseUrl2 = 'https://ad776369d415.ngrok-free.app/';
+  static const String baseUrl3 = 'https://ad776369d415.ngrok-free.app/';
+  static const String baseUrl4 = 'https://ad776369d415.ngrok-free.app/';
+  static const String notificationUrl =
+      'https://ad776369d415.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
@@ -1290,6 +1290,8 @@ class ApiService {
     required int? organizationId,
     required bool isLogin,
     required int? locationId, // true = login, false = logout
+    required double latitude,
+    required double longitude,
   }) async {
     final endpoint = isLogin ? 'loginPersonDetection' : 'logoutPersonDetection';
 
@@ -1303,6 +1305,8 @@ class ApiService {
     request.fields['shiftId'] = shiftId.toString();
     request.fields['organizationId'] = organizationId.toString();
     request.fields['locationId'] = locationId.toString();
+    request.fields['lat'] = latitude.toString();
+    request.fields['lang'] = longitude.toString();
 
     if (await imageFile.exists()) {
       final fileExtension = path.extension(imageFile.path).toLowerCase();
