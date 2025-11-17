@@ -51,7 +51,7 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
 
   Future<void> _fetchProjects() async {
     try {
-      final response = await ApiService.fetchOrgProjects(_organizationId!);
+      final response = await ApiService.fetchLocation(_organizationId!);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
@@ -64,8 +64,8 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
   }
 
   Future<void> _selectProject(dynamic project) async {
-    final int? projectId = project['projectId'];
-    final String projectName = project['projectName'] ?? 'Unknown';
+    final int? projectId = project['id'];
+    final String projectName = project['location'] ?? 'Unknown';
     if (projectId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Invalid project selected.')),
@@ -201,7 +201,7 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                       itemCount: _projects.length,
                       itemBuilder: (context, index) {
                         final project = _projects[index];
-                        final isSelected = _selectedProjectId == project['projectId'];
+                        final isSelected = _selectedProjectId == project['id'];
                         return GestureDetector(
                           onTap: () => _selectProject(project),
                           child: Container(
@@ -212,7 +212,7 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                             ),
                             child: Center(
                               child: Text(
-                                project['projectName'] ?? 'Unknown',
+                                project['location'] ?? 'Unknown',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
