@@ -38,107 +38,187 @@ class _MyDataTableWidgetState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
-      appBar: const CustomAppBar(),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              height: 100,
-              child: Image.asset('lib/assets/images/ajna.png'),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: FutureBuilder<Map<String, String?>>(
-                future: getUserDetails(),
-                builder: (BuildContext context,
-                    AsyncSnapshot<Map<String, String?>> snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  } else if (snapshot.hasError) {
-                    return const Center(
-                        child: Text("Error fetching user details"));
-                  } else if (snapshot.hasData) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize
-                            .min, // To keep the column size to its contents
-                        children: [
-                          const Text("Hi",
-                              style: TextStyle(
-                                  fontSize: 30.0,
-                                  color: Color.fromARGB(255, 132, 132, 139))),
-                          Text(
-                            snapshot.data?['userName'] ?? "No username found",
-                            style: const TextStyle(
-                                fontSize: 30.0,
-                                color: Color.fromARGB(255, 23, 139, 171)),
-                          ),
-                          Text(
-                            "Mail id: ${snapshot.data?['email'] ?? 'No email found'}",
-                            style: const TextStyle(
-                                fontSize: 22.0,
-                                color: Color.fromARGB(255, 85, 86, 87)),
-                          ),
-                          Container(
-                            margin: const EdgeInsets.only(top: 20),
-                            decoration: BoxDecoration(
-                              color: const Color.fromRGBO(
-                                  6, 73, 105, 1), // Light blue background color
-                              borderRadius: BorderRadius.circular(6),
-                              // Rounded corners
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: InkWell(
-                                onTap: _navigateToResetPasswordScreen,
-                                splashColor: Colors.blue.withOpacity(0.5),
-                                child: const Text(
-                                  'Reset Password',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Color.fromARGB(255, 255, 255, 255),
-                                    fontWeight: FontWeight.bold,
+      appBar: const CustomAppBar(showBackButton: true),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.fromRGBO(6, 73, 105, 0.1),
+              Color.fromRGBO(23, 139, 171, 0.1),
+              Colors.white,
+            ],
+          ),
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: screenHeight * 0.12,
+                  child: Image.asset('lib/assets/images/ajna.png'),
+                ),
+                const SizedBox(height: 20),
+                FutureBuilder<Map<String, String?>>(
+                  future: getUserDetails(),
+                  builder: (BuildContext context,
+                      AsyncSnapshot<Map<String, String?>> snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    } else if (snapshot.hasError) {
+                      return const Center(
+                          child: Text("Error fetching user details"));
+                    } else if (snapshot.hasData) {
+                      return Card(
+                        elevation: 12,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color.fromRGBO(6, 73, 105, 1),
+                                    width: 3,
+                                  ),
+                                ),
+                                child: CircleAvatar(
+                                  radius: screenWidth * 0.15,
+                                  backgroundColor: const Color.fromARGB(255, 23, 139, 171),
+                                  child: Icon(
+                                    Icons.person,
+                                    size: screenWidth * 0.18,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                "Welcome back!",
+                                style: TextStyle(
+                                  fontSize: 24.0,
+                                  color: Color.fromARGB(255, 132, 132, 139),
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                snapshot.data?['userName'] ?? "No username found",
+                                style: const TextStyle(
+                                  fontSize: 32.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color.fromRGBO(6, 73, 105, 1),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                snapshot.data?['email'] ?? 'No email found',
+                                style: const TextStyle(
+                                  fontSize: 18.0,
+                                  color: Color.fromARGB(255, 85, 86, 87),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _navigateToResetPasswordScreen,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    elevation: 4,
+                                  ),
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.lock_reset),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Reset Password',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    );
-                  } else {
-                    return const Center(child: Text("No user details found"));
-                  }
-                },
-              ),
+                        ),
+                      );
+                    } else {
+                      return const Center(child: Text("No user details found"));
+                    }
+                  },
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
-      bottomNavigationBar: Container(
-        padding: EdgeInsets.zero,
-        color: const Color.fromRGBO(6, 73, 105, 1),
+    );
+  }
+
+  Widget _buildProfileOption({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        decoration: BoxDecoration(
+          color: isDestructive ? Colors.red.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDestructive ? Colors.red.withOpacity(0.3) : const Color.fromRGBO(6, 73, 105, 0.2),
+          ),
+        ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            IconButton(
-              icon: const Icon(Icons.arrow_back, size: 16),
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          const HomeScreen()), // Replace with your actual Profile Screen
-                );
-              },
-              padding: EdgeInsets.zero,
-              color: Colors.white,
+          children: [
+            Icon(
+              icon,
+              color: isDestructive ? Colors.red : const Color.fromRGBO(6, 73, 105, 1),
+              size: 24,
             ),
-            const Text(
-              'Home',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: isDestructive ? Colors.red : const Color.fromRGBO(6, 73, 105, 1),
+                ),
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: isDestructive ? Colors.red : const Color.fromRGBO(6, 73, 105, 0.5),
+              size: 16,
             ),
           ],
         ),

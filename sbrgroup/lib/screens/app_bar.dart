@@ -7,7 +7,11 @@ import 'package:ajna/screens/profile/profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const CustomAppBar({Key? key}) : super(key: key);
+  final bool showBackButton;
+  final bool showProfileIcon;
+  final VoidCallback? onBackPressed;
+
+  const CustomAppBar({Key? key, this.showBackButton = false, this.showProfileIcon = true, this.onBackPressed}) : super(key: key);
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -16,19 +20,29 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     return AppBar(
       backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
-      leading: GestureDetector(
-        // onTap: () {
-        //   Navigator.pushReplacement(
-        //       context,
-        //       MaterialPageRoute(
-        //           builder: (context) =>
-        //               const HomeScreen())); // Modify this line according to how your navigation is set up
-        // },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Image.asset('lib/assets/images/ajna.png'),
-        ),
-      ),
+      leading: showBackButton
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const HomeScreen()),
+                );
+              },
+            )
+          : GestureDetector(
+              // onTap: () {
+              //   Navigator.pushReplacement(
+              //       context,
+              //       MaterialPageRoute(
+              //           builder: (context) =>
+              //               const HomeScreen())); // Modify this line according to how your navigation is set up
+              // },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Image.asset('lib/assets/images/ajna.png'),
+              ),
+            ),
       title: const Text('AJNA',
           style: TextStyle(color: Colors.white, fontSize: 18)),
       actions: <Widget>[

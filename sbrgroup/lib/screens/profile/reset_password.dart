@@ -76,7 +76,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const CustomAppBar(),
+      appBar: const CustomAppBar(showProfileIcon: false),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -131,29 +131,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        color: const Color.fromRGBO(6, 73, 105, 1),
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                minimumSize: const Size(40, 30),
-              ),
-              onPressed: () => _navigateToLoginFormScreen(context),
-              child: const Row(
-                children: <Widget>[
-                  Icon(Icons.arrow_back, size: 16),
-                  SizedBox(width: 4),
-                  Text('Back to Login', style: TextStyle(fontSize: 12)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+
     );
   }
 }

@@ -77,8 +77,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
-      appBar: const CustomAppBar(),
+       appBar: AppBar(
+        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Forgot Password',
+              style: TextStyle(
+                fontSize: screenWidth > 600 ? 22 : 18,
+                color: Colors.white,
+              ),
+            ),
+            
+          ],
+        ),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -133,29 +151,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        color: const Color.fromRGBO(6, 73, 105, 1),
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                minimumSize: const Size(40, 30),
-              ),
-              onPressed: () => _navigateToLoginFormScreen(context),
-              child: const Row(
-                children: <Widget>[
-                  Icon(Icons.arrow_back, size: 16),
-                  SizedBox(width: 4),
-                  Text('Back to Login', style: TextStyle(fontSize: 12)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      // bottomNavigationBar: Container(
+      //   color: const Color.fromRGBO(6, 73, 105, 1),
+      //   padding: const EdgeInsets.symmetric(vertical: 4),
+      //   child: Row(
+      //     mainAxisAlignment: MainAxisAlignment.start,
+      //     children: <Widget>[
+      //       TextButton(
+      //         style: TextButton.styleFrom(
+      //           foregroundColor: Colors.white,
+      //           minimumSize: const Size(40, 30),
+      //         ),
+      //         onPressed: () => _navigateToLoginFormScreen(context),
+      //         child: const Row(
+      //           children: <Widget>[
+      //             Icon(Icons.arrow_back, size: 16),
+      //             SizedBox(width: 4),
+      //             Text('Back to Login', style: TextStyle(fontSize: 12)),
+      //           ],
+      //         ),
+      //       ),
+      //     ],
+      //   ),
+      // ),
     );
   }
 }
