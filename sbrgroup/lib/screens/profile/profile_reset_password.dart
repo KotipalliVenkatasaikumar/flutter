@@ -103,7 +103,7 @@ class _ProfileResetPasswordScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const CustomAppBar(),
+      appBar: const CustomAppBar(showBackButton: true),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -159,32 +159,7 @@ class _ProfileResetPasswordScreenState
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        padding: EdgeInsets.zero,
-        color: const Color.fromRGBO(6, 73, 105, 1),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            IconButton(
-              icon: const Icon(Icons.arrow_back, size: 16),
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          const ProfileScreen()), // Replace with your actual Profile Screen
-                );
-              },
-              padding: EdgeInsets.zero,
-              color: Colors.white,
-            ),
-            const Text(
-              'Profile',
-              style: TextStyle(color: Colors.white, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
+
     );
   }
 }

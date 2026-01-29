@@ -30,18 +30,18 @@ class ApiService {
   // static const String baseUrl4 = 'http://65.2.49.230:1093/';
   // static const String notificationUrl = 'http://65.2.49.230:1093';
 
-  // static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
-  // static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
-  // static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
-  // static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
-  // static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
+  static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl3 = 'https://sbrgroup.salesncrm.com/';
+  static const String baseUrl4 = 'https://sbrgroup.salesncrm.com/';
+  static const String notificationUrl = 'https://sbrgroup.salesncrm.com';
 
-  static const String baseUrl1 = 'https://ad776369d415.ngrok-free.app/';
-  static const String baseUrl2 = 'https://ad776369d415.ngrok-free.app/';
-  static const String baseUrl3 = 'https://ad776369d415.ngrok-free.app/';
-  static const String baseUrl4 = 'https://ad776369d415.ngrok-free.app/';
-  static const String notificationUrl =
-      'https://ad776369d415.ngrok-free.app';
+  // static const String baseUrl1 = 'https://ad776369d415.ngrok-free.app/';
+  // static const String baseUrl2 = 'https://ad776369d415.ngrok-free.app/';
+  // static const String baseUrl3 = 'https://ad776369d415.ngrok-free.app/';
+  // static const String baseUrl4 = 'https://ad776369d415.ngrok-free.app/';
+  // static const String notificationUrl =
+  //     'https://ad776369d415.ngrok-free.app';
 
   static final List<String> excludedEndpoints = [
     'api/user/user/signUp',
