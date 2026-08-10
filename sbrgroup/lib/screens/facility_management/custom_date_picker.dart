@@ -53,13 +53,23 @@ class _CustomDateRangePickerState extends State<CustomDateRangePicker> {
           _startDate = now.subtract(Duration(days: 15));
           _endDate = now;
           break;
+        case '13':
         case 'This Month':
           _startDate = DateTime(now.year, now.month, 1);
           _endDate = now;
           break;
+        case '30':
         case 'Last Month':
           _startDate = DateTime(now.year, now.month - 1, 1);
           _endDate = DateTime(now.year, now.month, 0);
+          break;
+        case '130':
+          _startDate = now.subtract(Duration(days: 30));
+          _endDate = now;
+          break;
+        case '90':
+          _startDate = now.subtract(Duration(days: 90));
+          _endDate = now;
           break;
         default:
           _selectedRange = '0';
@@ -141,8 +151,10 @@ class _CustomDateRangePickerState extends State<CustomDateRangePicker> {
                 '1', // Yesterday
                 '7', // Last 7 Days
                 '15', // Last 15 Days
-                // 'This Month',
-                // 'Last Month',
+                '13', // This Month
+                '30', // Last Month
+                '130', // Last 30 Days
+                '90', // Last 90 Days
                 'Custom',
               ].map((String value) {
                 String text;
@@ -159,11 +171,17 @@ class _CustomDateRangePickerState extends State<CustomDateRangePicker> {
                   case '15':
                     text = 'Last 15 Days';
                     break;
-                  case 'This Month':
+                  case '13':
                     text = 'This Month';
                     break;
-                  case 'Last Month':
+                  case '30':
                     text = 'Last Month';
+                    break;
+                  case '130':
+                    text = 'Last 30 Days';
+                    break;
+                  case '90':
+                    text = 'Last 90 Days';
                     break;
                   default:
                     text =
@@ -224,15 +242,25 @@ class _CustomDateRangePickerState extends State<CustomDateRangePicker> {
         endDate = now;
         widget.onDateRangeSelected(startDate, endDate, '15');
         break;
-      case 'This Month':
+      case '13':
         startDate = DateTime(now.year, now.month, 1);
         endDate = now;
-        widget.onDateRangeSelected(startDate, endDate, 'This Month');
+        widget.onDateRangeSelected(startDate, endDate, '13');
         break;
-      case 'Last Month':
+      case '30':
         startDate = DateTime(now.year, now.month - 1, 1);
         endDate = DateTime(now.year, now.month, 0);
-        widget.onDateRangeSelected(startDate, endDate, 'Last Month');
+        widget.onDateRangeSelected(startDate, endDate, '30');
+        break;
+      case '130':
+        startDate = now.subtract(Duration(days: 30));
+        endDate = now;
+        widget.onDateRangeSelected(startDate, endDate, '130');
+        break;
+      case '90':
+        startDate = now.subtract(Duration(days: 90));
+        endDate = now;
+        widget.onDateRangeSelected(startDate, endDate, '90');
         break;
     }
 

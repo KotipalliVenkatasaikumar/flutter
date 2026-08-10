@@ -1410,6 +1410,59 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    showAttendanceList = true;
+                                    selectedStatus =
+                                        'Client Meet And Logged In';
+                                  });
+                                  fetchAttendanceDetails(selectedStatus, '');
+                                },
+                                child: Card(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 3,
+                                  color: Colors.purple.shade50,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8, horizontal: 10),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.business_center,
+                                            color: Colors.purple.shade600,
+                                            size: 24),
+                                        const SizedBox(height: 4),
+                                        const Text(
+                                          'Client Meeting',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black87,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${attendanceRecords.firstWhere((element) => element.attendanceStatus == 'Client Meet And Logged In', orElse: () => Attendance(count: 0, attendanceStatus: 'Client Meet And Logged In', createdDate: null, lateComerCount: 0, earlyLeaverCount: 0)).count}',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.purple.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
