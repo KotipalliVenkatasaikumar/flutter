@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:ajna/screens/sqflite/database_helper.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +7,8 @@ import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/qr_scanner.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 import 'package:url_launcher/url_launcher.dart'; // For launching URLs
 
 class ScanSchedule {
@@ -133,7 +134,20 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: const Text(
           'QR Schedule',
           style: TextStyle(
@@ -162,8 +176,8 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                   style: TextStyle(
                     fontSize: 20.0, // Adjust the font size here
                     fontWeight: FontWeight.bold, // Example: make it bold
-                    color: Color.fromRGBO(6, 73, 105,
-                        1), // Set custom text color using Color.fromRGBO
+                    color: AppColors
+                        .primary, // Set custom text color using Color.fromRGBO
                     // You can add more properties like fontFamily, letterSpacing, etc. if needed
                   ),
                 );
@@ -237,8 +251,12 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                     physics:
                                         const NeverScrollableScrollPhysics(),
                                     gridDelegate:
-                                        const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 3, // Number of columns
+                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: gridColumns(
+                                        MediaQuery.of(context).size.width,
+                                        minColumns: 3,
+                                        tileTarget: 130,
+                                      ),
                                       crossAxisSpacing: 10,
                                       mainAxisSpacing: 10,
                                       childAspectRatio:
@@ -318,15 +336,18 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
       bottomNavigationBar: Container(
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.divider)),
+        ),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
         child: RichText(
           text: TextSpan(
             children: [
-              const TextSpan(
+              TextSpan(
                 text: 'Powered by ',
                 style: TextStyle(
-                  color: Color.fromARGB(255, 230, 227, 227),
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
               ),
@@ -352,10 +373,10 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                     launch('https://www.corenuts.com');
                   },
               ),
-              const TextSpan(
+              TextSpan(
                 text: ' Technologies',
                 style: TextStyle(
-                  color: Color.fromARGB(255, 230, 227, 227),
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                   decoration: TextDecoration.none,
                 ),

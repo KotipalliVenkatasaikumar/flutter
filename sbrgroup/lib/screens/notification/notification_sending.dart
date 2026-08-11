@@ -1,5 +1,6 @@
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:flutter/material.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class NotificationSendingScreen extends StatefulWidget {
   const NotificationSendingScreen({super.key});
@@ -106,7 +107,20 @@ class _NotificationSendingScreenState extends State<NotificationSendingScreen> {
     double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

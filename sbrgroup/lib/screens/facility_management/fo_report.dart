@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
@@ -7,15 +6,12 @@ import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/ImageFullScreen%20.dart';
 import 'package:ajna/screens/facility_management/custom_date_picker.dart';
 import 'package:ajna/screens/util.dart';
-import 'package:dio/dio.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
-import 'package:android_intent_plus/android_intent.dart';
 import 'package:intl/intl.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class FieldOfficerPatrol {
   final int fieldOfficerPatrolId;
@@ -139,9 +135,6 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
   Map<String, Map<String, List<FieldOfficerPatrol>>>
       groupedFieldOfficerPatrols = {};
 
-  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
-  bool _isDownloading = false; // Add downloading state
-  double _downloadProgress = 0.0; // Add download progress
 
   int _currentPage = 0;
   int _pageSize = 14;
@@ -162,7 +155,7 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
       // Proceed with other initialization steps if connected
       intOrganizationId = await Util.getOrganizationId();
 
-      _checkForUpdate();
+      _checkSession();
       _fetchProjects(intOrganizationId!);
       _scrollController.addListener(_scrollListener);
       fetchReportData(isLoadingMore: true);
@@ -376,12 +369,12 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
   }
 
   Future<void> _refreshData() async {
-    _checkForUpdate();
+    _checkSession();
     _currentPage = 0;
     await fetchReportData();
   }
 
-  Future<void> _checkForUpdate() async {
+  Future<void> _checkSession() async {
     try {
       final response = await ApiService.checkForUpdate();
 
@@ -426,110 +419,10 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
 
         return; // Early exit due to session expiration
       }
-
-      if (response.statusCode == 200) {
-        final latestVersion = jsonDecode(response.body)['commonRefValue'];
-        final packageInfo = await PackageInfo.fromPlatform();
-        final currentVersion = packageInfo.version;
-
-        if (latestVersion != currentVersion) {
-          final apkUrlResponse = await ApiService.getApkDownloadUrl();
-          if (apkUrlResponse.statusCode == 200) {
-            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
-            setState(() {});
-            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
-
-            // if (isDeleted) {
-            //   print("Logout successful, device token deleted.");
-            // } else {
-            //   print("Logout successful, but failed to delete device token.");
-            // }
-
-            // // Clear user session data
-            // SharedPreferences prefs = await SharedPreferences.getInstance();
-            // await prefs.clear();
-
-            // Show update dialog
-            _showUpdateDialog(_apkUrl);
-          } else {
-            print(
-                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
-          }
-        } else {
-          setState(() {}); // Update state if no update required
-        }
-      } else {
-        print('Failed to fetch latest app version: ${response.statusCode}');
-      }
     } catch (e) {
-      print('Error checking for update: $e');
+      debugPrint('Error checking session: $e');
       setState(() {});
     }
-  }
-
-  void _showUpdateDialog(String apkUrl) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        barrierDismissible: false, // Prevent dialog from closing on tap outside
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Update Available'),
-            content: const Text(
-                'A new version of the app is available. Please update.'),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop(); // Dismiss dialog
-                  await downloadAndInstallAPK(apkUrl);
-                },
-                child: const Text('Update'),
-              ),
-            ],
-          );
-        },
-      );
-    });
-  }
-
-  Future<void> downloadAndInstallAPK(String url) async {
-    Dio dio = Dio();
-    String savePath = await getFilePath('ajna-app-release.apk');
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0.0;
-    });
-
-    try {
-      await dio.download(
-        url,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            setState(() {
-              _downloadProgress = received / total;
-            });
-          }
-        },
-      );
-
-      setState(() {
-        _isDownloading = false;
-      });
-
-     await Util.installApk(savePath);
-    } catch (e) {
-      print('Download error: $e');
-      setState(() {
-        _isDownloading = false;
-      });
-    }
-  }
-
-  Future<String> getFilePath(String fileName) async {
-    Directory tempDir = await getTemporaryDirectory();
-    String tempPath = tempDir.path;
-    return '$tempPath/$fileName';
   }
 
   final DateFormat formatter = DateFormat('dd MMM yyyy, hh:mm a');
@@ -540,7 +433,20 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -551,27 +457,6 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
                 color: Colors.white,
               ),
             ),
-            if (_isDownloading)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: LinearProgressIndicator(
-                        value: _downloadProgress,
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        valueColor:
-                            const AlwaysStoppedAnimation<Color>(Colors.green),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${(_downloadProgress * 100).toStringAsFixed(0)}%',
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
           ],
         ),
         centerTitle: true,
@@ -648,7 +533,7 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderSide: const BorderSide(
-                                        color: Color.fromRGBO(6, 73, 105, 1),
+                                        color: AppColors.primary,
                                         width: 2),
                                     borderRadius: BorderRadius.circular(8.0),
                                   ),
@@ -730,8 +615,7 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
                                         borderRadius:
                                             BorderRadius.circular(12.0),
                                         border: Border.all(
-                                          color: Color.fromRGBO(6, 73, 105,
-                                              1), // Border color applied here
+                                          color: AppColors.primary, // Border color applied here
                                           width:
                                               1.0, // Border width, adjust as needed
                                         ),
@@ -752,8 +636,7 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
                                           border: InputBorder.none,
                                           hintStyle: TextStyle(fontSize: 14),
                                           prefixIcon: Icon(Icons.search,
-                                              color: Color.fromRGBO(
-                                                  6, 73, 105, 1)),
+                                              color: AppColors.primary),
                                         ),
                                         onChanged: (value) {
                                           setState(() {
@@ -817,8 +700,7 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
                                       children: [
                                         const Icon(
                                           Icons.location_on,
-                                          color: Color.fromRGBO(
-                                              6, 73, 105, 1), // Updated color
+                                          color: AppColors.primary, // Updated color
                                           size: 18,
                                         ),
                                         const SizedBox(width: 6),
@@ -827,8 +709,7 @@ class _FoReportsScreenState extends State<FoReportsScreen> {
                                           style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
-                                            color: Color.fromRGBO(6, 73, 105,
-                                                1), // Updated text color
+                                            color: AppColors.primary, // Updated text color
                                           ),
                                         ),
                                       ],

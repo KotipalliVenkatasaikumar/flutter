@@ -14,6 +14,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class LogOutFaceAttendanceScreen extends StatefulWidget {
   @override
@@ -463,7 +464,20 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     final loadingFontSize = width > 500 ? 20.0 : 16.0;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

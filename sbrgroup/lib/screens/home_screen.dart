@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
@@ -26,16 +25,17 @@ import 'package:ajna/screens/facility_management/reset_android_id.dart';
 import 'package:ajna/screens/facility_management/user_manage_screen.dart';
 import 'package:ajna/screens/facility_management/user_registration.dart';
 import 'package:ajna/screens/notification/notification_sending.dart';
+import 'package:ajna/screens/parking/parking_home_screen.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
 import 'package:ajna/screens/student/MathTablesTestScreen.dart';
 import 'package:ajna/screens/util.dart';
-import 'package:dio/dio.dart';
+import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
+import 'package:ajna/utils/update_checker.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -53,14 +53,19 @@ class HomeScreen extends StatefulWidget {
   _HomeScreenState createState() => _HomeScreenState();
 }
 
+/// A single module tile in the home grid.
+///
+/// Card-on-canvas: a white surface with a hairline border and a soft brand
+/// shadow, holding a rounded, brand-tinted icon plate. Each tile takes an
+/// [accentColor] from [AppColors.tileAccent] so the grid reads as a set instead
+/// of a wall of identical squares.
 class IconButtonWidget extends StatelessWidget {
   final String? imagePath;
   final IconData? icon;
   final String label;
   final Function() onTap;
-  final Color iconColor;
-  final Color backgroundColor;
-  final double textSize; // New parameter for dynamic text size
+  final Color accentColor;
+  final double textSize; // Dynamic text size
 
   const IconButtonWidget({
     Key? key,
@@ -68,8 +73,7 @@ class IconButtonWidget extends StatelessWidget {
     this.imagePath,
     required this.label,
     required this.onTap,
-    this.iconColor = Colors.black,
-    this.backgroundColor = Colors.white,
+    this.accentColor = AppColors.primary,
     this.textSize = 12.0, // Default text size
   })  : assert(imagePath != null || icon != null,
             'Either imagePath or icon must be provided'),
@@ -77,30 +81,62 @@ class IconButtonWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: imagePath != null
-                ? Image.asset(imagePath!, width: 50, height: 50)
-                : Icon(icon, size: 25, color: iconColor),
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: accentColor.withOpacity(0.12),
+        highlightColor: accentColor.withOpacity(0.06),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.divider),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadow,
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(fontSize: textSize), // Use dynamic text size
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Brand-tinted plate behind the module artwork.
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: AppColors.tint(accentColor, 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                alignment: Alignment.center,
+                child: imagePath != null
+                    ? Image.asset(imagePath!, width: 32, height: 32)
+                    : Icon(icon, size: 26, color: accentColor),
+              ),
+              const SizedBox(height: 10),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: textSize,
+                    fontWeight: FontWeight.w600,
+                    height: 1.15,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -135,7 +171,17 @@ class _HomeScreenState extends State<HomeScreen> {
     'Math Quiz',
     'Add Absent List',
     'Facial Attendance',
+    'Parking',
   };
+
+  /// Labels shown even when the role/menu API has not been updated yet.
+  ///
+  /// The grid normally renders only what `fetchAdditionalData` returns for the
+  /// user's role. Parking is new, so until "Parking" is added to the role menu
+  /// on the backend the tile would never appear and the module would be
+  /// unreachable. **Remove this once the backend returns it** — otherwise the
+  /// tile is visible to every role, bypassing the menu permissions.
+  static const Set<String> _alwaysVisibleLabels = {'Parking'};
 
   final List<Map<String, dynamic>> predefinedIcons = [
     {
@@ -320,6 +366,14 @@ class _HomeScreenState extends State<HomeScreen> {
       'label': 'Facial Attendance',
       'onTap': () => AttendanceDashboardScreen(),
     },
+    {
+      // No artwork for parking yet — the tile falls back to a Material icon,
+      // which IconButtonWidget already supports via `icon`.
+      'icon': Icons.local_parking,
+      'imagePath': null,
+      'label': 'Parking',
+      'onTap': () => const ParkingHomeScreen(),
+    },
     // {
     //   //'icon': Icons.bar_chart,
     //   'icon': null,
@@ -339,10 +393,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
 // Global navigator key for controlling navigation
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
-  bool _isDownloading = false; // Add downloading state
-  double _downloadProgress = 0.0; // Add download progress
-
   String? androidId;
   late FirebaseMessaging _messaging;
   String? _deviceToken;
@@ -353,9 +403,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // _initializeData();
-    // _checkForUpdate();
-    // _initializeFirebaseMessaging();
     _initializeData();
     _checkConnectivity();
   }
@@ -365,7 +412,11 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isConnected = await connectivityHandler.checkConnectivity(context);
     if (isConnected) {
       // Proceed with other initialization steps if connected
-      _checkForUpdate();
+      _checkSession();
+      // Store-based update prompt — replaces the old in-app APK download.
+      // forceUpdate mirrors SBR WorkHub: once the backend bumps `ajna_version`,
+      // the prompt is mandatory and cannot be dismissed.
+      if (mounted) UpdateChecker.checkForUpdate(context, forceUpdate: true);
       _initializeFirebaseMessaging();
     }
   }
@@ -382,11 +433,21 @@ class _HomeScreenState extends State<HomeScreen> {
       for (var predefinedIcon in predefinedIcons) {
         if (iconLabels.contains(predefinedIcon['label'])) {
           matchedIcons.add(predefinedIcon);
-          print(matchedIcons);
         }
       }
     }
 
+    // Add any always-visible tile the role menu did not return, so a new module
+    // is reachable before the backend menu is updated. See the field's doc.
+    for (final predefinedIcon in predefinedIcons) {
+      final String label = predefinedIcon['label'] as String;
+      if (_alwaysVisibleLabels.contains(label) &&
+          !matchedIcons.any((m) => m['label'] == label)) {
+        matchedIcons.add(predefinedIcon);
+      }
+    }
+
+    if (!mounted) return;
     setState(() {
       _iconDetails = matchedIcons;
     });
@@ -452,7 +513,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // Retry logic to get the device token
       String? token = await _getDeviceTokenWithRetry();
       if (token != null) {
-        print("Device Token: $token");
+        // Presence only — the FCM token is a push credential.
+        debugPrint("Device token retrieved.");
 
         // Save token locally and handle errors
         bool isSaved = await Util.saveDeviceToken(token);
@@ -542,7 +604,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _checkForUpdate() async {
+  /// Validates the stored session whenever the home screen loads or refreshes.
+  ///
+  /// This call used to double as the in-app APK update check. The app now ships
+  /// through the App Store / Play Store, so the version comparison and APK
+  /// download were removed — but the 401 branch is unrelated to updating and is
+  /// still load-bearing: it clears a stale session and pushes the user back to
+  /// login. Only that behaviour remains.
+  Future<void> _checkSession() async {
     try {
       final response = await ApiService.checkForUpdate();
 
@@ -586,115 +655,16 @@ class _HomeScreenState extends State<HomeScreen> {
         });
 
         return; // Early exit due to session expiration
-      } else if (response.statusCode == 200) {
-        final latestVersion = jsonDecode(response.body)['commonRefValue'];
-        final packageInfo = await PackageInfo.fromPlatform();
-        final currentVersion = packageInfo.version;
-
-        if (latestVersion != currentVersion) {
-          final apkUrlResponse = await ApiService.getApkDownloadUrl();
-          if (apkUrlResponse.statusCode == 200) {
-            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
-            setState(() {});
-            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
-
-            // if (isDeleted) {
-            //   print("Logout successful, device token deleted.");
-            // } else {
-            //   print("Logout successful, but failed to delete device token.");
-            // }
-
-            // // Clear user session data
-            // SharedPreferences prefs = await SharedPreferences.getInstance();
-            // await prefs.clear();
-
-            // Show update dialog
-            _showUpdateDialog(_apkUrl);
-          } else {
-            print(
-                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
-          }
-        } else {
-          setState(() {}); // Update state if no update required
-        }
-      } else {
-        print('Failed to fetch latest app version: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error checking for update: $e');
-      setState(() {});
+      debugPrint('Error checking session: $e');
     }
-  }
-
-  void _showUpdateDialog(String apkUrl) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        barrierDismissible: false, // Prevent dialog from closing on tap outside
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Update Available'),
-            content: const Text(
-                'A new version of the app is available. Please update.'),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop(); // Dismiss dialog
-                  await downloadAndInstallAPK(apkUrl);
-                },
-                child: const Text('Update'),
-              ),
-            ],
-          );
-        },
-      );
-    });
-  }
-
-  Future<void> downloadAndInstallAPK(String url) async {
-    Dio dio = Dio();
-    String savePath = await getFilePath('ajna-app-release.apk');
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0.0;
-    });
-
-    try {
-      await dio.download(
-        url,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            setState(() {
-              _downloadProgress = received / total;
-            });
-          }
-        },
-      );
-
-      setState(() {
-        _isDownloading = false;
-      });
-
-      await Util.installApk(savePath);
-    } catch (e) {
-      print('Download error: $e');
-      setState(() {
-        _isDownloading = false;
-      });
-    }
-  }
-
-  Future<String> getFilePath(String fileName) async {
-    Directory tempDir = await getTemporaryDirectory();
-    String tempPath = tempDir.path;
-    return '$tempPath/$fileName';
   }
 
   Future<void> _refreshData() async {
     await _initializeData();
     await _fetchAdditionalData(roleId!);
-    _checkForUpdate();
+    _checkSession();
   }
 
   Future<Map<String, String?>> getUserDetails() async {
@@ -728,6 +698,21 @@ class _HomeScreenState extends State<HomeScreen> {
   //   }
   // }
 
+  /// A soft, blurred colour blob used to decorate the hero gradient — the
+  /// logo's two chevron colours, bled out behind the greeting.
+  Widget _glowBlob(Color color, double size, double opacity) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [color.withOpacity(opacity), color.withOpacity(0)],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final String? messageText =
@@ -743,102 +728,172 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: const CustomAppBar(),
       body: RefreshIndicator(
+        color: AppColors.primary,
+        backgroundColor: AppColors.surface,
         onRefresh: _refreshData,
         child: Center(
           child: Column(
             children: <Widget>[
+              // ── Brand hero: the logo's azure→emerald sweep, with the two
+              // chevrons echoed as soft glow blobs behind the greeting.
               Container(
-                height: 110,
+                height: 118,
                 width: MediaQuery.of(context).size.width,
-                margin: const EdgeInsets.all(20),
+                margin: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  image: const DecorationImage(
-                    image: AssetImage('lib/assets/images/image-background.png'),
-                    fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: AppColors.heroGradient,
+                    stops: AppColors.heroStops,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.heroShadow.withOpacity(0.28),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-                child: _isDownloading
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(value: _downloadProgress),
-                            const SizedBox(height: 16.0),
-                            Text(
-                              'Downloading update: ${(_downloadProgress * 100).toStringAsFixed(0)}%',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      )
-                    : FutureBuilder<Map<String, String?>>(
-                        future: getUserDetails(),
-                        builder: (BuildContext context,
-                            AsyncSnapshot<Map<String, String?>> snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          } else if (snapshot.hasError) {
-                            return const Center(
-                                child: Text("Error fetching user details"));
-                          } else if (snapshot.hasData) {
-                            String? profileImageUrl =
-                                snapshot.data!['profileImageUrl'];
-                            return Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 40,
-                                    backgroundImage: profileImageUrl != null
-                                        ? NetworkImage(profileImageUrl)
-                                        : const AssetImage(
-                                                'lib/assets/images/avatar.png')
-                                            as ImageProvider,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      right: -28,
+                      top: -34,
+                      child: _glowBlob(AppColors.emeraldGlow, 118, 0.20),
+                    ),
+                    Positioned(
+                      right: 54,
+                      bottom: -46,
+                      child: _glowBlob(AppColors.azureGlow, 104, 0.22),
+                    ),
+                    FutureBuilder<Map<String, String?>>(
+                            future: getUserDetails(),
+                            builder: (BuildContext context,
+                                AsyncSnapshot<Map<String, String?>> snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                      color: AppColors.onPrimary),
+                                );
+                              } else if (snapshot.hasError) {
+                                return const Center(
+                                  child: Text(
+                                    "Error fetching user details",
+                                    style: TextStyle(
+                                        color: AppColors.onPrimary),
                                   ),
-                                  const SizedBox(width: 16),
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                );
+                              } else if (snapshot.hasData) {
+                                String? profileImageUrl =
+                                    snapshot.data!['profileImageUrl'];
+                                final String? designation =
+                                    snapshot.data!['designation'];
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 16),
+                                  child: Row(
                                     children: [
-                                      const Padding(
-                                        padding: EdgeInsets.only(top: 8.0),
-                                        child: Text(
-                                          "Hi! Welcome.",
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color.fromARGB(
-                                                255, 231, 225, 225),
-                                          ),
+                                      // Ring lifts the avatar off the gradient.
+                                      Container(
+                                        padding: const EdgeInsets.all(2.5),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.onPrimary
+                                              .withOpacity(0.28),
+                                        ),
+                                        child: CircleAvatar(
+                                          radius: 32,
+                                          backgroundColor: AppColors.onPrimary,
+                                          backgroundImage: profileImageUrl !=
+                                                  null
+                                              ? NetworkImage(profileImageUrl)
+                                              : const AssetImage(
+                                                      'lib/assets/images/avatar.png')
+                                                  as ImageProvider,
                                         ),
                                       ),
-                                      Text(
-                                        snapshot.data!['userName'] ??
-                                            "No username found",
-                                        style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color.fromARGB(
-                                              255, 255, 255, 255),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              "Hi! Welcome.",
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                                letterSpacing: 0.2,
+                                                color: AppColors.onPrimary
+                                                    .withOpacity(0.85),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              snapshot.data!['userName'] ??
+                                                  "No username found",
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.onPrimary,
+                                              ),
+                                            ),
+                                            if (designation != null &&
+                                                designation.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Container(
+                                                padding: const EdgeInsets
+                                                    .symmetric(
+                                                    horizontal: 9, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.onPrimary
+                                                      .withOpacity(0.18),
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
+                                                ),
+                                                child: Text(
+                                                  designation,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppColors.onPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                         ),
                                       ),
                                     ],
-                                  )
-                                ],
-                              ),
-                            );
-                          } else {
-                            return const Center(
-                                child: Text("No user details found"));
-                          }
-                        },
-                      ),
+                                  ),
+                                );
+                              } else {
+                                return const Center(
+                                  child: Text(
+                                    "No user details found",
+                                    style: TextStyle(
+                                        color: AppColors.onPrimary),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                  ],
+                ),
               ),
               // Container(
               //   height: 60,
@@ -911,11 +966,50 @@ class _HomeScreenState extends State<HomeScreen> {
               //   ),
               // ),
 
+              // ── Section label above the module grid.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 0, 22, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 3,
+                      height: 15,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Quick Actions',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.1,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_iconDetails != null)
+                      Text(
+                        '${_iconDetails!.length} modules',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: _iconDetails == null
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary),
+                        )
                       : LayoutBuilder(
                           builder: (context, constraints) {
                             double screenWidth = constraints.maxWidth;
@@ -923,19 +1017,29 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? 10.0
                                 : 14.0; // Adjust text size
 
+                            // Column count follows the available width instead
+                            // of being fixed at 3 — on a tablet three tiles
+                            // stretched to ~300px each and looked broken.
+                            final int columns =
+                                gridColumns(screenWidth, minColumns: 3);
+
                             return GridView.count(
                               shrinkWrap: true,
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 10.0,
-                              mainAxisSpacing: 10.0,
-                              children: _iconDetails!.map((iconDetail) {
+                              crossAxisCount: columns,
+                              crossAxisSpacing: 12.0,
+                              mainAxisSpacing: 12.0,
+                              childAspectRatio: 0.92,
+                              children: _iconDetails!
+                                  .asMap()
+                                  .entries
+                                  .map((entry) {
+                                final iconDetail = entry.value;
                                 return IconButtonWidget(
                                   icon: iconDetail['icon'],
                                   imagePath: iconDetail['imagePath'],
                                   label: iconDetail['label'],
-                                  iconColor: Colors.white,
-                                  backgroundColor:
-                                      const Color.fromRGBO(255, 255, 255, 255),
+                                  accentColor:
+                                      AppColors.tileAccent(entry.key),
                                   textSize: textSize, // Pass dynamic text size
                                   onTap: () {
                                     Navigator.push(
@@ -958,15 +1062,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.divider)),
+        ),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
         child: RichText(
           text: TextSpan(
             children: [
-              const TextSpan(
+              TextSpan(
                 text: 'Powered by  ',
                 style: TextStyle(
-                  color: Color.fromARGB(255, 230, 227, 227),
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
               ),
@@ -994,11 +1101,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     launch('https://www.corenuts.com');
                   },
               ),
-              const TextSpan(
+              TextSpan(
                 text: ' Technologies',
                 style: TextStyle(
-                  color: Color.fromARGB(
-                      255, 230, 227, 227), // Choose a suitable color
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                   decoration: TextDecoration.none,
                 ),

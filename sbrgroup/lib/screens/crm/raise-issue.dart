@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class RaiseIssue extends StatefulWidget {
   @override
@@ -187,7 +188,20 @@ class _RaiseIssueState extends State<RaiseIssue> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: const Text('Raise Issue',
             style: TextStyle(fontSize: 18, color: Colors.white)),
         centerTitle: true,
@@ -202,6 +216,8 @@ class _RaiseIssueState extends State<RaiseIssue> {
             children: [
               // Dropdown for issue types
               DropdownButtonFormField2<String>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Issue Types',
                   border: OutlineInputBorder(
@@ -228,6 +244,8 @@ class _RaiseIssueState extends State<RaiseIssue> {
               const SizedBox(height: 20),
               // Dropdown for sub-issue types
               DropdownButtonFormField2<String>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Sub Issue Types',
                   border: OutlineInputBorder(

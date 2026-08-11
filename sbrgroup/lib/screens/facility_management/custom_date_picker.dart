@@ -1,6 +1,7 @@
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class CustomDateRangePicker extends StatefulWidget {
   final Function(DateTime, DateTime, String) onDateRangeSelected;
@@ -141,7 +142,7 @@ class _CustomDateRangePickerState extends State<CustomDateRangePicker> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderSide: const BorderSide(
-                      color: Color.fromRGBO(6, 73, 105, 1), width: 2),
+                      color: AppColors.primary, width: 2),
                   borderRadius: BorderRadius.circular(8.0),
                 ),
               ),

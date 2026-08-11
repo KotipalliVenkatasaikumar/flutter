@@ -1,22 +1,28 @@
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/screens/profile/auth_card.dart';
 import 'package:ajna/screens/profile/otp_validation.dart';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
-import 'package:ajna/screens/app_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class ForgotPassword extends StatelessWidget {
   ForgotPassword({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // Pre-existing nested MaterialApp (kept so navigation is unchanged), now
+    // seeded from the brand colour so it matches the rest of the app.
     return MaterialApp(
       title: 'AJNA',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 41, 83, 137),
+          seedColor: AppColors.primary,
+          primary: AppColors.primary,
         ),
+        scaffoldBackgroundColor: AppColors.bg,
         useMaterial3: true,
       ),
       home: ForgotPasswordScreen(),
@@ -80,7 +86,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
        appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -97,62 +116,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              height: 100,
-              child: Image.asset('lib/assets/images/ajna.png'),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Forgot Password',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 60),
-              child: Form(
-                key: _formKey,
-                child: TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Email',
-                    contentPadding:
-                        EdgeInsets.symmetric(vertical: 0, horizontal: 10),
-                  ),
-                  validator: (value) {
-                    if (value?.isEmpty ?? true) {
-                      return 'Please enter your email';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-            ),
-            ElevatedButton(
-              style: ButtonStyle(
-                backgroundColor: MaterialStateProperty.all(
-                    const Color.fromRGBO(6, 73, 105, 1)),
-              ),
-              onPressed: _generateotp,
-              child:
-                  const Text('Continue', style: TextStyle(color: Colors.white)),
-            ),
-            if (_errorMessage.isNotEmpty)
-              Text(
-                _errorMessage,
-                style: const TextStyle(color: Colors.red),
-              ),
-          ],
+      backgroundColor: AppColors.bg,
+      body: AuthCard(
+        title: 'Forgot Password',
+        subtitle:
+            'Enter your registered email and we will send you a one-time code.',
+        errorMessage: _errorMessage,
+        onSubmit: _generateotp,
+        field: Form(
+          key: _formKey,
+          child: TextFormField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            style: TextStyle(color: AppColors.textPrimary),
+            cursorColor: AppColors.primary,
+            decoration: authFieldDecoration('Email'),
+            validator: (value) {
+              if (value?.isEmpty ?? true) {
+                return 'Please enter your email';
+              }
+              return null;
+            },
+          ),
         ),
       ),
       // bottomNavigationBar: Container(
-      //   color: const Color.fromRGBO(6, 73, 105, 1),
+      //   color: AppColors.primary,
       //   padding: const EdgeInsets.symmetric(vertical: 4),
       //   child: Row(
       //     mainAxisAlignment: MainAxisAlignment.start,

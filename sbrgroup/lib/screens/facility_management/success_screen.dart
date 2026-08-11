@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ajna/screens/home_screen.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class SuccessScreen extends StatefulWidget {
   @override
@@ -49,7 +50,20 @@ class _SuccessScreenState extends State<SuccessScreen>
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false, // Remove the back arrow
-          backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+          backgroundColor: Colors.transparent,
+          foregroundColor: AppColors.onPrimary,
+          elevation: 0,
+          // Brand hero gradient — matches CustomAppBar and the home header.
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: AppColors.heroGradient,
+                stops: AppColors.heroStops,
+              ),
+            ),
+          ),
           title: const Text(
             'Success',
             style: TextStyle(
@@ -92,7 +106,7 @@ class _SuccessScreenState extends State<SuccessScreen>
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
-                        const Color.fromRGBO(6, 73, 105, 1), // Button color
+                        AppColors.primary, // Button color
                     padding: EdgeInsets.symmetric(
                       horizontal: screenSize.width * 0.12, // Dynamic padding
                       vertical: screenSize.height * 0.02, // Dynamic padding

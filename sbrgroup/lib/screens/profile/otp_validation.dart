@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:ajna/screens/api_endpoints.dart';
-import 'package:ajna/screens/app_bar.dart';
+import 'package:ajna/screens/profile/auth_card.dart';
 import 'package:ajna/screens/profile/reset_password.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class OtpValidation extends StatelessWidget {
   OtpValidation({Key? key}) : super(key: key);
@@ -68,7 +69,20 @@ class _OtpValidationScreenState extends State<OtpValidationScreen> {
     double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
        appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -85,61 +99,35 @@ class _OtpValidationScreenState extends State<OtpValidationScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              height: 100,
-              child: Image.asset('lib/assets/images/ajna.png'),
+      backgroundColor: AppColors.bg,
+      body: AuthCard(
+        title: 'Verify OTP',
+        subtitle: 'Enter the one-time code sent to your registered email.',
+        errorMessage: _errorMessage,
+        onSubmit: _generateotp,
+        field: Form(
+          key: _formKey,
+          child: TextFormField(
+            controller: _otpController,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 6,
             ),
-            const SizedBox(height: 20),
-            const Text(
-              'Forget Password',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 60),
-              child: Form(
-                key: _formKey,
-                child: TextFormField(
-                  controller: _otpController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'OTP',
-                    contentPadding:
-                        EdgeInsets.symmetric(vertical: 0, horizontal: 10),
-                  ),
-                  validator: (value) {
-                    if (value?.isEmpty ?? true) {
-                      return 'Please enter your otp';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-            ),
-            ElevatedButton(
-              style: ButtonStyle(
-                backgroundColor: MaterialStateProperty.all(
-                    const Color.fromRGBO(6, 73, 105, 1)),
-              ),
-              onPressed: _generateotp,
-              child:
-                  const Text('Continue', style: TextStyle(color: Colors.white)),
-            ),
-            if (_errorMessage.isNotEmpty)
-              Text(
-                _errorMessage,
-                style: const TextStyle(color: Colors.red),
-              ),
-          ],
+            cursorColor: AppColors.primary,
+            decoration: authFieldDecoration('OTP'),
+            validator: (value) {
+              if (value?.isEmpty ?? true) {
+                return 'Please enter your otp';
+              }
+              return null;
+            },
+          ),
         ),
       ),
-
     );
   }
 }

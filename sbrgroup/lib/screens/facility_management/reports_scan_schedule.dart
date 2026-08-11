@@ -6,6 +6,8 @@ import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/ImageFullScreen%20.dart';
 import 'package:ajna/screens/home_screen.dart';
 import 'custom_date_picker.dart';
+import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 
 class Schedule {
   final String scheduleTime;
@@ -192,7 +194,20 @@ class _ScheduleReportScreenState extends State<ScheduleReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         iconTheme: const IconThemeData(
           color: Colors.white,
         ),
@@ -363,8 +378,12 @@ class _ScheduleReportScreenState extends State<ScheduleReportScreen> {
                                 shrinkWrap: true,
                                 physics: NeverScrollableScrollPhysics(),
                                 gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3, // Updated to 3 columns
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: gridColumns(
+                                    MediaQuery.of(context).size.width,
+                                    minColumns: 3,
+                                    tileTarget: 130,
+                                  ),
                                   crossAxisSpacing: 10.0,
                                   mainAxisSpacing: 10.0,
                                 ),
@@ -514,7 +533,7 @@ class _ScheduleReportScreenState extends State<ScheduleReportScreen> {
       ),
       bottomNavigationBar: Container(
         padding: EdgeInsets.zero,
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        color: AppColors.primary,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[

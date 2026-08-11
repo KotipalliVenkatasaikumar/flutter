@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
@@ -9,17 +8,14 @@ import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/facility_management/custom_date_picker.dart';
 import 'package:ajna/screens/util.dart';
-import 'package:dio/dio.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
-import 'package:android_intent_plus/android_intent.dart';
 import 'package:intl/intl.dart';
 import 'package:multi_select_flutter/dialog/multi_select_dialog_field.dart';
 import 'package:multi_select_flutter/util/multi_select_item.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class Attendance {
   final int count;
@@ -223,15 +219,12 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   bool isNotificationSent = false;
 
   bool showAttendanceList = true;
-  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
-  bool _isDownloading = false; // Add downloading state
-  double _downloadProgress = 0.0; // Add download progress
 
   @override
   void initState() {
     super.initState();
     // _initializeData();
-    // _checkForUpdate();
+    // _checkSession();
     // _scrollController.addListener(_scrollListener);
     _checkConnectivity();
   }
@@ -239,7 +232,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Future<void> _checkConnectivity() async {
     bool isConnected = await connectivityHandler.checkConnectivity(context);
     if (isConnected) {
-      _checkForUpdate();
+      _checkSession();
       // Proceed with other initialization steps if connected
       _initializeData();
 
@@ -510,7 +503,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   }
 
   Future<void> refreshData() async {
-    _checkForUpdate();
+    _checkSession();
     await fetchAttendanceDashboard();
     // attendaceReportDetails = [];
     // fetchAttendanceDetails('', '');
@@ -677,7 +670,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
 
   // app update check
 
-  Future<void> _checkForUpdate() async {
+  Future<void> _checkSession() async {
     try {
       final response = await ApiService.checkForUpdate();
 
@@ -722,110 +715,10 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
 
         return; // Early exit due to session expiration
       }
-
-      if (response.statusCode == 200) {
-        final latestVersion = jsonDecode(response.body)['commonRefValue'];
-        final packageInfo = await PackageInfo.fromPlatform();
-        final currentVersion = packageInfo.version;
-
-        if (latestVersion != currentVersion) {
-          final apkUrlResponse = await ApiService.getApkDownloadUrl();
-          if (apkUrlResponse.statusCode == 200) {
-            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
-            setState(() {});
-            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
-
-            // if (isDeleted) {
-            //   print("Logout successful, device token deleted.");
-            // } else {
-            //   print("Logout successful, but failed to delete device token.");
-            // }
-
-            // // Clear user session data
-            // SharedPreferences prefs = await SharedPreferences.getInstance();
-            // await prefs.clear();
-
-            // Show update dialog
-            _showUpdateDialog(_apkUrl);
-          } else {
-            print(
-                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
-          }
-        } else {
-          setState(() {}); // Update state if no update required
-        }
-      } else {
-        print('Failed to fetch latest app version: ${response.statusCode}');
-      }
     } catch (e) {
-      print('Error checking for update: $e');
+      debugPrint('Error checking session: $e');
       setState(() {});
     }
-  }
-
-  void _showUpdateDialog(String apkUrl) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        barrierDismissible: false, // Prevent dialog from closing on tap outside
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Update Available'),
-            content: const Text(
-                'A new version of the app is available. Please update.'),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop(); // Dismiss dialog
-                  await downloadAndInstallAPK(apkUrl);
-                },
-                child: const Text('Update'),
-              ),
-            ],
-          );
-        },
-      );
-    });
-  }
-
-  Future<void> downloadAndInstallAPK(String url) async {
-    Dio dio = Dio();
-    String savePath = await getFilePath('ajna-app-release.apk');
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0.0;
-    });
-
-    try {
-      await dio.download(
-        url,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            setState(() {
-              _downloadProgress = received / total;
-            });
-          }
-        },
-      );
-
-      setState(() {
-        _isDownloading = false;
-      });
-
-      await Util.installApk(savePath);
-    } catch (e) {
-      print('Download error: $e');
-      setState(() {
-        _isDownloading = false;
-      });
-    }
-  }
-
-  Future<String> getFilePath(String fileName) async {
-    Directory tempDir = await getTemporaryDirectory();
-    String tempPath = tempDir.path;
-    return '$tempPath/$fileName';
   }
 
   @override
@@ -835,7 +728,20 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -846,27 +752,6 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                 color: Colors.white,
               ),
             ),
-            if (_isDownloading)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: LinearProgressIndicator(
-                        value: _downloadProgress,
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        valueColor:
-                            const AlwaysStoppedAnimation<Color>(Colors.green),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${(_downloadProgress * 100).toStringAsFixed(0)}%',
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
           ],
         ),
         centerTitle: true,
@@ -946,7 +831,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                         ),
                                         prefixIcon: Icon(
                                           Icons.location_on,
-                                          color: Color.fromRGBO(6, 73, 105, 1),
+                                          color: AppColors.primary,
                                         ),
                                         contentPadding:
                                             const EdgeInsets.symmetric(
@@ -972,8 +857,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                         ),
                                         focusedBorder: OutlineInputBorder(
                                           borderSide: BorderSide(
-                                            color:
-                                                Color.fromRGBO(6, 73, 105, 1),
+                                            color: AppColors.primary,
                                             width: 2.0,
                                           ),
                                           borderRadius:
@@ -1168,72 +1052,108 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceEvenly,
                                     children: [
-                                      TextButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            // Select all shifts that contain "Night" in their commonRefKey
-                                            selectedShifts = shifts
-                                                .where((shift) => shift
-                                                    .commonRefKey
-                                                    .contains('All'))
-                                                .toList();
-                                            selectedShiftIds = selectedShifts
-                                                .map((shift) => shift.id)
-                                                .toList();
-                                          });
-                                          fetchAttendanceDashboard();
-                                        },
-                                        child: Text(
-                                          "All Shifts",
-                                          style: TextStyle(
-                                            color:
-                                                Color.fromRGBO(6, 73, 105, 1),
+                                      Expanded(
+                                        child: TextButton(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4),
+                                            minimumSize: const Size(0, 40),
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              // Select all shifts that contain "Night" in their commonRefKey
+                                              selectedShifts = shifts
+                                                  .where((shift) => shift
+                                                      .commonRefKey
+                                                      .contains('All'))
+                                                  .toList();
+                                              selectedShiftIds = selectedShifts
+                                                  .map((shift) => shift.id)
+                                                  .toList();
+                                            });
+                                            fetchAttendanceDashboard();
+                                          },
+                                          child: Text(
+                                            "All Shifts",
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: AppColors.primary,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                      TextButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            // Select all shifts that contain "Morning" in their commonRefKey
-                                            selectedShifts = shifts
-                                                .where((shift) => shift
-                                                    .commonRefKey
-                                                    .contains('Morning'))
-                                                .toList();
-                                            selectedShiftIds = selectedShifts
-                                                .map((shift) => shift.id)
-                                                .toList();
-                                          });
-                                          fetchAttendanceDashboard();
-                                        },
-                                        child: Text(
-                                          "Morning Shifts",
-                                          style: TextStyle(
-                                            color:
-                                                Color.fromRGBO(6, 73, 105, 1),
+                                      Expanded(
+                                        child: TextButton(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4),
+                                            minimumSize: const Size(0, 40),
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              // Select all shifts that contain "Morning" in their commonRefKey
+                                              selectedShifts = shifts
+                                                  .where((shift) => shift
+                                                      .commonRefKey
+                                                      .contains('Morning'))
+                                                  .toList();
+                                              selectedShiftIds = selectedShifts
+                                                  .map((shift) => shift.id)
+                                                  .toList();
+                                            });
+                                            fetchAttendanceDashboard();
+                                          },
+                                          child: Text(
+                                            "Morning Shifts",
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: AppColors.primary,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                      TextButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            // Select all shifts that contain "Night" in their commonRefKey
-                                            selectedShifts = shifts
-                                                .where((shift) => shift
-                                                    .commonRefKey
-                                                    .contains('Night'))
-                                                .toList();
-                                            selectedShiftIds = selectedShifts
-                                                .map((shift) => shift.id)
-                                                .toList();
-                                          });
-                                          fetchAttendanceDashboard();
-                                        },
-                                        child: const Text(
-                                          "Night Shifts",
-                                          style: TextStyle(
-                                            color:
-                                                Color.fromRGBO(6, 73, 105, 1),
+                                      Expanded(
+                                        child: TextButton(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4),
+                                            minimumSize: const Size(0, 40),
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              // Select all shifts that contain "Night" in their commonRefKey
+                                              selectedShifts = shifts
+                                                  .where((shift) => shift
+                                                      .commonRefKey
+                                                      .contains('Night'))
+                                                  .toList();
+                                              selectedShiftIds = selectedShifts
+                                                  .map((shift) => shift.id)
+                                                  .toList();
+                                            });
+                                            fetchAttendanceDashboard();
+                                          },
+                                          child: const Text(
+                                            "Night Shifts",
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: AppColors.primary,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -1252,22 +1172,21 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                       "Select Shifts",
                                       style: TextStyle(fontSize: 14),
                                     ),
-                                    selectedColor:
-                                        Color.fromRGBO(6, 73, 105, 1),
+                                    selectedColor: AppColors.primary,
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(8),
                                       color: Colors.white,
-                                      border: Border.all(
-                                          color: Color.fromRGBO(6, 73, 105, 1)),
+                                      border:
+                                          Border.all(color: AppColors.primary),
                                     ),
                                     buttonIcon: const Icon(
                                       Icons.access_time,
-                                      color: Color.fromRGBO(6, 73, 105, 1),
+                                      color: AppColors.primary,
                                     ),
                                     buttonText: Text(
                                       "Select Shifts",
                                       style: TextStyle(
-                                        color: Color.fromRGBO(6, 73, 105, 1),
+                                        color: AppColors.primary,
                                         fontWeight: FontWeight.w500,
                                         fontSize: 14,
                                       ),
@@ -1277,7 +1196,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                             0.75,
                                     itemsTextStyle:
                                         const TextStyle(fontSize: 12),
-                                    checkColor: Color.fromRGBO(6, 73, 105, 1),
+                                    checkColor: AppColors.primary,
                                     dialogHeight:
                                         MediaQuery.of(context).size.height *
                                             0.5,

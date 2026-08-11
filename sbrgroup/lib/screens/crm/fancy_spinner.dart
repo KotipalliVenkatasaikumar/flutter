@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class FancySpinner extends StatelessWidget {
   final Widget child;
@@ -25,7 +26,7 @@ class FancySpinner extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 const SpinKitFadingCube(
-                  color: Color.fromRGBO(6, 73, 105, 1),
+                  color: AppColors.primary,
                   size: 15.0,
                 ),
                 const SizedBox(height: 20),

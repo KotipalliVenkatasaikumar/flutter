@@ -3,19 +3,27 @@ import 'package:logger/logger.dart';
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/app_bar.dart';
+import 'package:ajna/screens/profile/auth_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class ResetPassword extends StatelessWidget {
   ResetPassword({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // Pre-existing nested MaterialApp (kept so navigation is unchanged), but
+    // seeded from the brand colour instead of a near-white that made every
+    // Material default render washed out.
     return MaterialApp(
       title: 'AJNA',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Color.fromARGB(255, 233, 238, 239),
+          seedColor: AppColors.primary,
+          primary: AppColors.primary,
         ),
+        scaffoldBackgroundColor: AppColors.bg,
         useMaterial3: true,
       ),
       home: ResetPasswordScreen(),
@@ -35,6 +43,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   String _errorMessage = '';
+  bool _isObscured = true;
 
   final logger = Logger();
 
@@ -76,62 +85,40 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: const CustomAppBar(showProfileIcon: false),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              height: 100,
-              child: Image.asset('lib/assets/images/ajna.png'),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Reset Password',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 60),
-              child: Form(
-                key: _formKey,
-                child: TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Enter New Password',
-                    contentPadding:
-                        EdgeInsets.symmetric(vertical: 0, horizontal: 10),
-                  ),
-                  validator: (value) {
-                    if (value?.isEmpty ?? true) {
-                      return 'Please enter your password';
-                    }
-                    return null;
-                  },
+      body: AuthCard(
+        title: 'Reset Password',
+        subtitle: 'Set a new password to finish signing back in.',
+        errorMessage: _errorMessage,
+        onSubmit: _generatepassword,
+        field: Form(
+          key: _formKey,
+          child: TextFormField(
+            controller: _passwordController,
+            // Was plain text — a new password must not be shown on screen.
+            obscureText: _isObscured,
+            style: TextStyle(color: AppColors.textPrimary),
+            cursorColor: AppColors.primary,
+            decoration: authFieldDecoration(
+              'Enter New Password',
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _isObscured ? Icons.visibility_off : Icons.visibility,
+                  color: AppColors.textSecondary,
                 ),
+                onPressed: () => setState(() => _isObscured = !_isObscured),
               ),
             ),
-            ElevatedButton(
-              style: ButtonStyle(
-                backgroundColor: MaterialStateProperty.all(
-                    const Color.fromRGBO(6, 73, 105, 1)),
-              ),
-              onPressed: _generatepassword,
-              child:
-                  const Text('Continue', style: TextStyle(color: Colors.white)),
-            ),
-            if (_errorMessage.isNotEmpty)
-              Text(
-                _errorMessage,
-                style: const TextStyle(color: Colors.red),
-              ),
-          ],
+            validator: (value) {
+              if (value?.isEmpty ?? true) {
+                return 'Please enter your password';
+              }
+              return null;
+            },
+          ),
         ),
       ),
-
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class PresalesPage extends StatefulWidget {
   @override
@@ -198,7 +199,20 @@ class _PresalesPageState extends State<PresalesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: const Text(
           'Dashboard',
           style: TextStyle(
@@ -470,7 +484,20 @@ class ProjectDetailsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(project.name),
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         child: Padding(

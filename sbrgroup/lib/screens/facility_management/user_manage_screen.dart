@@ -7,6 +7,7 @@ import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class UserManageScreen extends StatefulWidget {
   const UserManageScreen({super.key});
@@ -138,7 +139,7 @@ class _UserManageScreenState extends State<UserManageScreen> {
                   child: TextButton(
                     style: ButtonStyle(
                       backgroundColor: MaterialStateProperty.all<Color>(
-                          const Color.fromRGBO(6, 73, 105, 1)),
+                          AppColors.primary),
                       foregroundColor:
                           MaterialStateProperty.all<Color>(Colors.white),
                     ),
@@ -176,7 +177,20 @@ class _UserManageScreenState extends State<UserManageScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: const Text(
           'User Manage Screen',
           style: TextStyle(
@@ -415,15 +429,18 @@ class _UserManageScreenState extends State<UserManageScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
       bottomNavigationBar: Container(
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.divider)),
+        ),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
         child: RichText(
           text: TextSpan(
             children: [
-              const TextSpan(
+              TextSpan(
                 text: 'Powered by ',
                 style: TextStyle(
-                  color: Color.fromARGB(255, 230, 227, 227),
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
               ),
@@ -451,11 +468,10 @@ class _UserManageScreenState extends State<UserManageScreen> {
                     launch('https://www.corenuts.com');
                   },
               ),
-              const TextSpan(
+              TextSpan(
                 text: ' Technologies',
                 style: TextStyle(
-                  color: Color.fromARGB(
-                      255, 230, 227, 227), // Choose a suitable color
+                  color: AppColors.textSecondary, // Choose a suitable color
                   fontSize: 12,
                   decoration: TextDecoration.none,
                 ),

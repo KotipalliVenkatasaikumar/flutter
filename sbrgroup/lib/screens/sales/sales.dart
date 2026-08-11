@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class Sales extends StatelessWidget {
   @override
@@ -12,6 +13,20 @@ class Sales extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Text('Sales Dashboard'),
         centerTitle: true,
       ),
