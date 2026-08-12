@@ -161,7 +161,7 @@ class _ParkingHomeScreenState extends State<ParkingHomeScreen> {
                 children: [
                   Expanded(
                     child: _actionTile(
-                      label: 'Register',
+                      label: 'Vehicle movement',
                       caption: 'Who is inside',
                       icon: Icons.list_alt,
                       color: AppColors.primaryLight,

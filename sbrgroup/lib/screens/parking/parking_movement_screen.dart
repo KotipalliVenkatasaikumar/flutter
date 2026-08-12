@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/parking/parking_context.dart';
@@ -8,6 +9,8 @@ import 'package:ajna/theme/app_colors.dart';
 import 'package:ajna/theme/responsive.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// The vehicle movement register.
 ///
@@ -38,6 +41,12 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
 
   String _status = 'INSIDE';
   String? _vehicleType;
+
+  /// Levels at this site, for the Zone filter the web register has.
+  List<ZoneOccupancy> _zones = [];
+  int? _zoneId;
+
+  bool _exporting = false;
   DateTime? _from;
   DateTime? _to;
 
@@ -70,7 +79,35 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
         _loadMore();
       }
     });
+    _loadZones();
     _search(reset: true);
+  }
+
+  /// Levels for the Zone filter. Fails quietly: the filter is optional, and a
+  /// dialog here would interrupt someone who only wants the register.
+  Future<void> _loadZones() async {
+    final int? siteId = ParkingContext.siteId;
+    if (siteId == null) return;
+    try {
+      final response = await ApiService.getParkingZonesBySite(siteId);
+      if (!ApiService.isSuccess(response.statusCode)) {
+        debugPrint(
+            'Zones failed: HTTP ${response.statusCode} ${response.body}');
+        return;
+      }
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows = decoded is List ? decoded : const [];
+      if (!mounted) return;
+      setState(() {
+        _zones = rows
+            .whereType<Map<String, dynamic>>()
+            .map(ZoneOccupancy.fromJson)
+            .where((z) => z.zoneId != null)
+            .toList();
+      });
+    } catch (e) {
+      debugPrint('Zones error: $e');
+    }
   }
 
   @override
@@ -142,6 +179,13 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
       setState(() {
         _loading = true;
         _error = null;
+        // Cleared now rather than when the response lands: otherwise a filter
+        // change leaves the previous rows on screen until the server answers,
+        // and they are read as matching the filter that is now showing.
+        _rows.clear();
+        _totalMatching = 0;
+        _stillInsideCount = 0;
+        _totalCollected = null;
       });
     } else {
       setState(() => _loadingMore = true);
@@ -158,6 +202,7 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
             ? null
             : _plateController.text.trim(),
         vehicleType: _vehicleType,
+        zoneId: _zoneId,
         page: _page,
         pageSize: _pageSize,
       );
@@ -220,7 +265,11 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
             children: [
               _filters(),
               const SizedBox(height: 14),
-              if (_hasSearched && _error == null) _totals(),
+              if (_hasSearched && _error == null) ...[
+                _totals(),
+                const SizedBox(height: 10),
+                _exportBar(),
+              ],
               if (_error != null) ...[
                 const SizedBox(height: 4),
                 ParkingBanner(
@@ -272,10 +321,38 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
     );
   }
 
+  /// One line naming what is actually applied, shown on the collapsed panel so
+  /// nobody has to open it to work out why the list looks the way it does.
+  String get _filterSummary {
+    final parts = <String>[
+      _statuses.firstWhere((s) => s.value == _status).label,
+    ];
+    if (_vehicleType != null) {
+      parts.add(ParkingConstants.label(_vehicleType));
+    }
+    if (_zoneId != null) {
+      final z = _zones.where((z) => z.zoneId == _zoneId);
+      if (z.isNotEmpty) {
+        parts.add(z.first.displayName ??
+            z.first.zoneName ??
+            z.first.levelCode ??
+            'Level');
+      }
+    }
+    final plate = _plateController.text.trim();
+    if (plate.isNotEmpty) parts.add(plate);
+    if (_showsDateRange && (_from != null || _to != null)) {
+      final d = DateFormat('dd MMM');
+      parts.add('${_from == null ? "…" : d.format(_from!)}'
+          ' – ${_to == null ? "…" : d.format(_to!)}');
+    }
+    return parts.join(' · ');
+  }
+
   Widget _filters() {
     final df = DateFormat('dd MMM yyyy');
-    return ParkingCard(
-      title: 'Show',
+    return ParkingFilterCard(
+      summary: _filterSummary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -336,7 +413,165 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
                   _typeChip(t, ParkingConstants.label(t), vehicleIcon(t))),
             ],
           ),
+          // Zone filter, as the web register has. Hidden when the site has no
+          // levels configured — an "All" chip on its own filters nothing.
+          if (_zones.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Level',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _zoneChip(null, 'All'),
+                ..._zones.map((z) => _zoneChip(
+                      z.zoneId,
+                      z.displayName ?? z.zoneName ?? z.levelCode ?? 'Level',
+                    )),
+              ],
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  /// Writes the rows currently loaded to a CSV, as the web's EXPORT PAGE does.
+  ///
+  /// Deliberately only what has been loaded, and the button says so: silently
+  /// exporting a different set of rows than the one being looked at is how a
+  /// reconciliation goes wrong. Columns match the web export exactly.
+  Future<void> _exportLoadedRows() async {
+    if (_rows.isEmpty || _exporting) return;
+    setState(() => _exporting = true);
+
+    try {
+      String cell(Object? value) {
+        final text = value == null ? '' : value.toString();
+        return '"${text.replaceAll('"', '""')}"';
+      }
+
+      const header = [
+        'Vehicle',
+        'Type',
+        'Zone',
+        'Entry',
+        'Entry lane',
+        'Exit',
+        'Exit lane',
+        'Duration (mins)',
+        'Amount paid',
+        'Payment mode',
+        'Receipt',
+        'Status',
+      ];
+
+      final lines = <String>[header.map(cell).join(',')];
+      for (final r in _rows) {
+        lines.add([
+          r.label,
+          ParkingConstants.label(r.vehicleType),
+          r.zoneName ?? '',
+          r.entryTime ?? '',
+          r.entryLaneName ?? '',
+          r.exitTime ?? '',
+          r.exitLaneName ?? '',
+          r.durationMinutes ?? '',
+          r.amountPaid ?? 0,
+          r.paymentMode ?? '',
+          r.receiptNumber ?? '',
+          r.statusLabel,
+        ].map(cell).join(','));
+      }
+      // \r\n and a BOM so Excel opens it without a text-import step.
+      final csv = '\uFEFF${lines.join('\r\n')}';
+
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = Directory('/storage/emulated/0/Download');
+        if (!await dir.exists()) dir = await getExternalStorageDirectory();
+      } else if (Platform.isIOS) {
+        dir = await getApplicationDocumentsDirectory();
+      } else {
+        dir = await getDownloadsDirectory() ??
+            await getApplicationDocumentsDirectory();
+      }
+      if (dir == null) {
+        if (!mounted) return;
+        setState(() => _exporting = false);
+        _toast('Could not find a place to save the file.', AppColors.danger);
+        return;
+      }
+
+      final stamp = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final path = '${dir.path}/vehicle-movements-$stamp-'
+          '${DateTime.now().millisecondsSinceEpoch}.csv';
+      await File(path).writeAsString(csv);
+      debugPrint('Movement export written to $path');
+
+      if (!mounted) return;
+      setState(() => _exporting = false);
+
+      final result = await OpenFile.open(path);
+      if (!mounted) return;
+      _toast(
+        result.type == ResultType.done
+            ? 'Exported ${_rows.length} row(s).'
+            : 'Saved ${_rows.length} row(s) to Downloads.',
+        AppColors.success,
+      );
+    } catch (e) {
+      debugPrint('Movement export error: $e');
+      if (!mounted) return;
+      setState(() => _exporting = false);
+      _toast('Could not build the export. Please try again.', AppColors.danger);
+    }
+  }
+
+  void _toast(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        content: Text(message),
+      ),
+    );
+  }
+
+  Widget _zoneChip(int? value, String label) {
+    final bool on = _zoneId == value;
+    return InkWell(
+      onTap: () {
+        setState(() => _zoneId = value);
+        _search(reset: true);
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              on ? AppColors.primary : AppColors.tint(AppColors.primary, 0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: on ? AppColors.primary : AppColors.divider),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.layers_outlined,
+                size: 15,
+                color: on ? AppColors.onPrimary : AppColors.textSecondary),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: on ? AppColors.onPrimary : AppColors.textPrimary)),
+          ],
+        ),
       ),
     );
   }
@@ -417,26 +652,69 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
     return Row(
       children: [
         Expanded(
-          child: _statTile('Inside now', '$_stillInsideCount',
-              AppColors.success, Icons.local_parking),
+          child: _statTile('Inside now', AppColors.success, Icons.local_parking,
+              numeric: _stillInsideCount.toDouble()),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _statTile(
-              'Matching', '$_totalMatching', AppColors.primary, Icons.list_alt),
+          child: _statTile('Matching', AppColors.primary, Icons.list_alt,
+              numeric: _totalMatching.toDouble()),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _statTile('Collected', money(_totalCollected),
-              AppColors.amount, Icons.payments,
+          child: _statTile('Collected', AppColors.amount, Icons.payments,
               numeric: _totalCollected ?? 0, isMoney: true),
         ),
       ],
     );
   }
 
-  Widget _statTile(String label, String value, Color color, IconData icon,
-      {double? numeric, bool isMoney = false}) {
+  /// The totals above cover every matching vehicle; the export covers only the
+  /// rows pulled in so far. The web says the same thing in a note beside its
+  /// cards, and it has to be said, or the two numbers look like a discrepancy.
+  Widget _exportBar() {
+    final bool canExport = _rows.isNotEmpty && !_exporting;
+    final bool partial = _rows.length < _totalMatching;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            partial
+                ? 'Totals cover all $_totalMatching. Export writes the '
+                    '${_rows.length} loaded — scroll for more.'
+                : 'Export writes all ${_rows.length} row(s) shown.',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+          ),
+        ),
+        const SizedBox(width: 10),
+        OutlinedButton.icon(
+          onPressed: canExport ? _exportLoadedRows : null,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: BorderSide(
+                color: canExport ? AppColors.primary : AppColors.divider),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
+          icon: _exporting
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download, size: 17),
+          label: Text(_exporting ? 'Exporting…' : 'Export',
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    );
+  }
+
+  /// A count tile. Takes the number itself rather than a preformatted string:
+  /// it animates, and an earlier signature accepted both, rendered only the
+  /// number, and quietly showed 0 for every caller that passed just the text.
+  Widget _statTile(String label, Color color, IconData icon,
+      {required double numeric, bool isMoney = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       decoration: BoxDecoration(
@@ -451,7 +729,7 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
           FittedBox(
             child: isMoney
                 ? AnimatedCount(
-                    value: numeric ?? 0,
+                    value: numeric,
                     format: (v) => money(v),
                     style: TextStyle(
                         fontSize: 17,
@@ -459,7 +737,7 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
                         color: AppColors.textPrimary),
                   )
                 : AnimatedCount(
-                    value: numeric ?? 0,
+                    value: numeric,
                     style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
@@ -501,9 +779,7 @@ class _ParkingMovementScreenState extends State<ParkingMovementScreen> {
     final Color statusColor = r.stillInside
         ? (r.isLongStay ? AppColors.warning : AppColors.success)
         : (r.forceClosed ? AppColors.danger : AppColors.textSecondary);
-    final String statusText = r.stillInside
-        ? (r.isLongStay ? 'Long stay' : 'Inside')
-        : (r.forceClosed ? 'Force closed' : 'Left');
+    final String statusText = r.statusLabel;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),

@@ -19,7 +19,7 @@ import 'package:path_provider/path_provider.dart';
 /// asks: what did we take, and how did the car park behave. The remaining
 /// eleven are cuts of the same data and can be added once the client has said
 /// which cuts they want to see."
-enum _ReportTab { collection, operations }
+enum _ReportTab { collection, operations, recovery }
 
 class ParkingReportsScreen extends StatefulWidget {
   const ParkingReportsScreen({super.key});
@@ -42,6 +42,7 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
 
   CollectionReport? _collection;
   OperationsReport? _operations;
+  List<MerchantRecoveryLine>? _recovery;
 
   static final DateFormat _iso = DateFormat('yyyy-MM-dd');
   static final DateFormat _pretty = DateFormat('dd MMM');
@@ -97,20 +98,34 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
     try {
       final from = _iso.format(_from);
       final to = _iso.format(_to);
-      final response = _tab == _ReportTab.collection
-          ? await ApiService.getParkingCollectionReport(
-              siteId: _siteId!, fromDate: from, toDate: to)
-          : await ApiService.getParkingOperationsReport(
-              siteId: _siteId!, fromDate: from, toDate: to);
+      final response = switch (_tab) {
+        _ReportTab.collection => await ApiService.getParkingCollectionReport(
+            siteId: _siteId!, fromDate: from, toDate: to),
+        _ReportTab.operations => await ApiService.getParkingOperationsReport(
+            siteId: _siteId!, fromDate: from, toDate: to),
+        // The statement is monthly, so the range's start month is what counts.
+        _ReportTab.recovery => await ApiService.getParkingRecoveryStatement(
+            siteId: _siteId!, month: from),
+      };
       if (!mounted) return;
 
       if (ApiService.isSuccess(response.statusCode)) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final decoded = jsonDecode(response.body);
         setState(() {
-          if (_tab == _ReportTab.collection) {
-            _collection = CollectionReport.fromJson(json);
-          } else {
-            _operations = OperationsReport.fromJson(json);
+          switch (_tab) {
+            case _ReportTab.collection:
+              _collection =
+                  CollectionReport.fromJson(decoded as Map<String, dynamic>);
+            case _ReportTab.operations:
+              _operations =
+                  OperationsReport.fromJson(decoded as Map<String, dynamic>);
+            case _ReportTab.recovery:
+              final list =
+                  (decoded is List) ? decoded : (decoded['data'] ?? []);
+              _recovery = (list as List)
+                  .map((e) =>
+                      MerchantRecoveryLine.fromJson(e as Map<String, dynamic>))
+                  .toList();
           }
           _loading = false;
         });
@@ -243,9 +258,11 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
     if (tab == _tab) return;
     setState(() => _tab = tab);
     // Each tab is a separate call; only fetch the one being looked at.
-    final cached = tab == _ReportTab.collection
-        ? _collection != null
-        : _operations != null;
+    final cached = switch (tab) {
+      _ReportTab.collection => _collection != null,
+      _ReportTab.operations => _operations != null,
+      _ReportTab.recovery => _recovery != null,
+    };
     if (!cached) _load();
   }
 
@@ -257,6 +274,7 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
       _siteId = siteId;
       _collection = null;
       _operations = null;
+      _recovery = null;
     });
     _load();
   }
@@ -304,10 +322,12 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
                       child:
                           CircularProgressIndicator(color: AppColors.primary)),
                 )
-              else if (_tab == _ReportTab.collection)
-                ..._collectionView()
               else
-                ..._operationsView(),
+                ...switch (_tab) {
+                  _ReportTab.collection => _collectionView(),
+                  _ReportTab.operations => _operationsView(),
+                  _ReportTab.recovery => _recoveryView(),
+                },
             ],
           ),
         ),
@@ -378,9 +398,12 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
       children: [
         _tabChip(_ReportTab.collection, 'Collection', Icons.payments,
             'What we took'),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _tabChip(_ReportTab.operations, 'Operations', Icons.insights,
             'How it behaved'),
+        const SizedBox(width: 8),
+        _tabChip(_ReportTab.recovery, 'Recovery', Icons.storefront,
+            'Shop bill-back'),
       ],
     );
   }
@@ -484,8 +507,10 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '${_pretty.format(_from)} — ${_pretty.format(_to)}'
-                '${_from.year != _to.year ? " ${_to.year}" : ""}',
+                _tab == _ReportTab.recovery
+                    ? DateFormat('MMMM yyyy').format(_from)
+                    : '${_pretty.format(_from)} — ${_pretty.format(_to)}'
+                        '${_from.year != _to.year ? " ${_to.year}" : ""}',
                 style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
@@ -676,6 +701,144 @@ class _ParkingReportsScreenState extends State<ParkingReportsScreen> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------ recovery ----
+
+  List<Widget> _recoveryView() {
+    final lines = _recovery;
+    if (lines == null || lines.isEmpty) {
+      return [_empty('No shop validations to bill back this month.')];
+    }
+
+    double totalDiscount = 0;
+    double totalRecoverable = 0;
+    int totalCounter = 0;
+    for (final l in lines) {
+      totalDiscount += l.discountGiven ?? 0;
+      totalRecoverable += l.recoverableAmount ?? 0;
+      totalCounter += l.counterApplied ?? 0;
+    }
+
+    return [
+      AnimatedEntry(
+        index: 0,
+        child: _heroAmount('RECOVERABLE THIS MONTH', totalRecoverable, [
+          _heroPair('Given away', money(totalDiscount)),
+          _heroPair('Shops', '${lines.length}'),
+          _heroPair('Counter-applied', '$totalCounter'),
+        ]),
+      ),
+      const SizedBox(height: 14),
+      ...lines.asMap().entries.map((e) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child:
+                AnimatedEntry(index: e.key + 1, child: _recoveryCard(e.value)),
+          )),
+    ];
+  }
+
+  Widget _recoveryCard(MerchantRecoveryLine l) {
+    final int shop = l.shopApplied ?? 0;
+    final int counter = l.counterApplied ?? 0;
+    final int total = shop + counter;
+    final double shopShare = total > 0 ? shop / total : 0;
+
+    return ParkingCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l.shopName ?? 'Shop ${l.merchantId}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary)),
+                    if ((l.shopCode ?? '').isNotEmpty)
+                      Text(l.shopCode!,
+                          style: TextStyle(
+                              fontSize: 11.5, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+              if (!l.recoverable)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.textSecondary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text('NOT BILLABLE',
+                      style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.onPrimary)),
+                ),
+            ],
+          ),
+          Divider(color: AppColors.divider, height: 18),
+          KeyValueRow(label: 'Validations', value: '${l.validationCount ?? 0}'),
+          KeyValueRow(label: 'Given away', value: money(l.discountGiven)),
+          KeyValueRow(
+            label: 'Recoverable',
+            value: money(l.recoverableAmount),
+            emphasise: true,
+            valueColor: AppColors.amount,
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: 10),
+            // Who actually applied these. A line resting mostly on our staff's
+            // word is a conversation to have BEFORE the invoice goes out.
+            Row(
+              children: [
+                Text('Shop $shop',
+                    style: TextStyle(
+                        fontSize: 11.5, color: AppColors.textSecondary)),
+                const Spacer(),
+                Text('Counter $counter',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: l.mostlyCounterApplied
+                            ? FontWeight.w800
+                            : FontWeight.w400,
+                        color: l.mostlyCounterApplied
+                            ? AppColors.warning
+                            : AppColors.textSecondary)),
+              ],
+            ),
+            const SizedBox(height: 5),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: LinearProgressIndicator(
+                value: shopShare.clamp(0.0, 1.0),
+                minHeight: 6,
+                backgroundColor: AppColors.warning.withOpacity(0.45),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.success),
+              ),
+            ),
+            if (l.mostlyCounterApplied) ...[
+              const SizedBox(height: 10),
+              ParkingBanner(
+                text: 'Mostly applied by our counter '
+                    '(${money(l.counterAppliedAmount)}). Confirm with the shop '
+                    'before billing.',
+                color: AppColors.warning,
+                icon: Icons.help_outline,
+              ),
+            ],
+          ],
+        ],
       ),
     );
   }

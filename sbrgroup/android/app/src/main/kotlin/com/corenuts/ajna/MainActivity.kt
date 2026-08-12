@@ -1,4 +1,4 @@
-package com.example.ajna
+package com.corenuts.ajna
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

@@ -29,6 +29,58 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+// AGP 8 requires every Android module to declare a namespace, which nine of the
+// plugins this app depends on predate — three of them (connectivity, device_info,
+// qr_code_scanner) are discontinued and will never publish a fixed version.
+// Their manifests still carry the old `package` attribute, which is exactly what
+// the namespace replaced, so it is read back and applied. Build-time only: no
+// plugin behaviour changes.
+//
+// This has to be registered before the evaluationDependsOn block below, which
+// forces evaluation — afterEvaluate cannot be added to an evaluated project.
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            def ext = project.property("android")
+            if (ext.namespace == null) {
+                def manifest = project.file("src/main/AndroidManifest.xml")
+                if (manifest.exists()) {
+                    // Read with a regex rather than XmlSlurper: the class moved
+                    // packages between Groovy 2 and 3, so referring to it ties
+                    // this file to one Gradle version. `package` is only ever on
+                    // the root <manifest> element, so the first match is it.
+                    def matcher = manifest.text =~ /package\s*=\s*"([^"]+)"/
+                    if (matcher) {
+                        def pkg = matcher[0][1]
+                        ext.namespace = pkg
+                        logger.lifecycle("Applied namespace '${pkg}' to :${project.name}")
+                    }
+                }
+            }
+
+            // Java 17 sources cannot be compiled against a compileSdk below 30,
+            // and some of these plugins still pin 28. compileSdk is backwards
+            // compatible, so raising it changes nothing about what they call.
+            if (ext.compileSdk == null || ext.compileSdk < 34) {
+                ext.compileSdk = 36
+            }
+
+            // Gradle 8 turned a mismatched Java/Kotlin JVM target into a hard
+            // error. These plugins still declare Java 1.8 while their Kotlin
+            // compiles at 17, so both ends are pinned to 17 to agree.
+            ext.compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+            project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                compilerOptions {
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+                }
+            }
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

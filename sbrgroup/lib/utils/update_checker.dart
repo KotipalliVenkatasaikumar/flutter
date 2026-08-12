@@ -31,11 +31,9 @@ class UpdateChecker {
   //   2. playStoreLink   — must match the Android `applicationId` exactly.
   //   3. playStoreWebLink— same package name as (2).
   //
-  // ❗ The Android `applicationId` in android/app/build.gradle is currently
-  //    `com.example.ajna`, which Google Play refuses to publish. When you change
-  //    it, update BOTH links below and re-register the package in Firebase
-  //    (android/app/google-services.json must match, or push notifications and
-  //    login will break).
+  // The Android `applicationId` is `com.corenuts.ajna` and the two Play links
+  // below already match it. Only the App Store ID is still a placeholder — it
+  // is issued when the app record is created in App Store Connect.
   // ===========================================================================
 
   /// App Store link — dummy ID, replace with the real one.
@@ -43,12 +41,11 @@ class UpdateChecker {
       "https://apps.apple.com/us/app/ajna/id0000000000";
 
   /// Play Store link — opens the Play Store app directly.
-  static const String playStoreLink =
-      "market://details?id=com.sbrgroup.ajna";
+  static const String playStoreLink = "market://details?id=com.corenuts.ajna";
 
   /// Fallback web URL for when the Play Store app is unavailable.
   static const String playStoreWebLink =
-      "https://play.google.com/store/apps/details?id=com.sbrgroup.ajna";
+      "https://play.google.com/store/apps/details?id=com.corenuts.ajna";
 
   /// Numeric-aware version compare, so 1.10.0 correctly beats 1.9.0
   /// (a plain string `!=` would have fired on every mismatch).

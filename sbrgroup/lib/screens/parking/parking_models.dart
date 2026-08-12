@@ -248,6 +248,174 @@ class ParkingLane {
   }
 }
 
+/// A validating shop — `GET /parking/merchant/site/{siteId}`.
+class ParkingMerchant {
+  final int? merchantId;
+  final int? siteId;
+  final String? shopName;
+  final String? shopCode;
+  final String? validationType;
+  final double? validationValue;
+  final double? minBillAmount;
+  final int? monthlyCapCount;
+
+  /// Staff passes this shop may hold at once. Null means no limit — an unset
+  /// allocation is not the same as an allocation of zero.
+  final int? staffPassQuota;
+  final String? status;
+
+  ParkingMerchant({
+    this.merchantId,
+    this.siteId,
+    this.shopName,
+    this.shopCode,
+    this.validationType,
+    this.validationValue,
+    this.minBillAmount,
+    this.monthlyCapCount,
+    this.staffPassQuota,
+    this.status,
+  });
+
+  factory ParkingMerchant.fromJson(Map<String, dynamic> json) =>
+      ParkingMerchant(
+        merchantId: _toInt(json['merchantId']),
+        siteId: _toInt(json['siteId']),
+        shopName: json['shopName'],
+        shopCode: json['shopCode'],
+        validationType: json['validationType'],
+        validationValue: _toDouble(json['validationValue']),
+        minBillAmount: _toDouble(json['minBillAmount']),
+        monthlyCapCount: _toInt(json['monthlyCapCount']),
+        staffPassQuota: _toInt(json['staffPassQuota']),
+        status: json['status'],
+      );
+
+  bool get isActive => _isActiveStatus(status);
+}
+
+/// One shop's line on the monthly recovery statement — what the site bills
+/// back for the parking that shop gave away.
+class MerchantRecoveryLine {
+  final int? merchantId;
+  final String? shopName;
+  final String? shopCode;
+  final int? clientId;
+  final int? validationCount;
+
+  /// Total taken off shoppers' bills.
+  final double? discountGiven;
+
+  /// The billable portion — zero when the shop's agreement is non-recoverable.
+  final double? recoverableAmount;
+  final String? recoveryApplicable;
+
+  /// How many the shop applied itself, versus how many our own staff applied on
+  /// its word.
+  ///
+  /// "The split is what makes this statement defensible. A shop asked to pay
+  /// for validations it never made will refuse the invoice, and rightly — so a
+  /// line that is largely counter-applied is a conversation to have before
+  /// billing, not after."
+  final int? shopApplied;
+  final int? counterApplied;
+
+  /// Value of the counter-applied ones — the amount resting on staff's word.
+  final double? counterAppliedAmount;
+  final String? billingStatus;
+  final String? period;
+
+  MerchantRecoveryLine({
+    this.merchantId,
+    this.shopName,
+    this.shopCode,
+    this.clientId,
+    this.validationCount,
+    this.discountGiven,
+    this.recoverableAmount,
+    this.recoveryApplicable,
+    this.shopApplied,
+    this.counterApplied,
+    this.counterAppliedAmount,
+    this.billingStatus,
+    this.period,
+  });
+
+  factory MerchantRecoveryLine.fromJson(Map<String, dynamic> json) =>
+      MerchantRecoveryLine(
+        merchantId: _toInt(json['merchantId']),
+        shopName: json['shopName'],
+        shopCode: json['shopCode'],
+        clientId: _toInt(json['clientId']),
+        validationCount: _toInt(json['validationCount']),
+        discountGiven: _toDouble(json['discountGiven']),
+        recoverableAmount: _toDouble(json['recoverableAmount']),
+        recoveryApplicable: json['recoveryApplicable'],
+        shopApplied: _toInt(json['shopApplied']),
+        counterApplied: _toInt(json['counterApplied']),
+        counterAppliedAmount: _toDouble(json['counterAppliedAmount']),
+        billingStatus: json['billingStatus'],
+        period: json['period'],
+      );
+
+  /// Mostly applied by our own staff rather than the shop — the line to query
+  /// before sending the invoice, not after it is disputed.
+  bool get mostlyCounterApplied {
+    final total = (shopApplied ?? 0) + (counterApplied ?? 0);
+    if (total == 0) return false;
+    return (counterApplied ?? 0) * 2 > total;
+  }
+
+  bool get recoverable =>
+      (recoveryApplicable ?? '').toUpperCase() == 'Y' ||
+      (recoveryApplicable ?? '').toUpperCase() == 'YES' ||
+      (recoverableAmount ?? 0) > 0;
+}
+
+/// Result of applying a shop validation — `POST /parking/validation/validate`.
+class ValidationResponse {
+  final bool accepted;
+  final String? message;
+  final int? validationId;
+  final int? sessionId;
+  final String? ticketNumber;
+  final String? merchantName;
+  final String? validationType;
+  final double? validationValue;
+  final double? discountAmount;
+  final double? recoverableAmount;
+  final int? remainingThisMonth;
+
+  ValidationResponse({
+    required this.accepted,
+    this.message,
+    this.validationId,
+    this.sessionId,
+    this.ticketNumber,
+    this.merchantName,
+    this.validationType,
+    this.validationValue,
+    this.discountAmount,
+    this.recoverableAmount,
+    this.remainingThisMonth,
+  });
+
+  factory ValidationResponse.fromJson(Map<String, dynamic> json) =>
+      ValidationResponse(
+        accepted: json['accepted'] == true,
+        message: json['message'],
+        validationId: _toInt(json['validationId']),
+        sessionId: _toInt(json['sessionId']),
+        ticketNumber: json['ticketNumber'],
+        merchantName: json['merchantName'],
+        validationType: json['validationType'],
+        validationValue: _toDouble(json['validationValue']),
+        discountAmount: _toDouble(json['discountAmount']),
+        recoverableAmount: _toDouble(json['recoverableAmount']),
+        remainingThisMonth: _toInt(json['remainingThisMonth']),
+      );
+}
+
 /// Response of `POST /parking/session/entry`.
 class SessionEntryResponse {
   final bool admitted;
@@ -353,6 +521,14 @@ class ExitLookupResponse {
   final double? taxAmount;
   final double? netAmount;
   final bool freeExit;
+
+  /// The stay ended inside the free period.
+  ///
+  /// Distinct from [freeExit], which is merely "nothing to collect" and is
+  /// equally true for a pass holder, a fully validated shopper, and a site
+  /// whose tariff does not cover today. The exit screen has to tell those
+  /// apart: three are correct and the last is a fault that gives the stay away.
+  final bool withinGrace;
   final List<TariffBreakdownLine> breakdown;
   final bool alreadyPaid;
   final int? graceRemainingMinutes;
@@ -381,6 +557,7 @@ class ExitLookupResponse {
     this.taxAmount,
     this.netAmount,
     this.freeExit = false,
+    this.withinGrace = false,
     this.breakdown = const [],
     this.alreadyPaid = false,
     this.graceRemainingMinutes,
@@ -411,6 +588,7 @@ class ExitLookupResponse {
         taxAmount: _toDouble(json['taxAmount']),
         netAmount: _toDouble(json['netAmount']),
         freeExit: json['freeExit'] == true,
+        withinGrace: json['withinGrace'] == true,
         breakdown: (json['breakdown'] as List?)
                 ?.map((e) =>
                     TariffBreakdownLine.fromJson(e as Map<String, dynamic>))
@@ -423,8 +601,41 @@ class ExitLookupResponse {
                 const [],
       );
 
-  /// Nothing to collect — free exit, already settled, or a zero bill.
-  bool get nothingToCollect => freeExit || alreadyPaid || (netAmount ?? 0) <= 0;
+  /// Nothing to collect. Decided by the **amount**, as the web does — the
+  /// freeExit / alreadyPaid flags are shown as banners, but a zero bill is what
+  /// actually skips payment.
+  bool get nothingToCollect => (netAmount ?? 0) <= 0;
+
+  /// Why this stay costs nothing.
+  ///
+  /// Three of these are correct and the fourth is a fault, so the reason has to
+  /// be said out loud rather than shown as a single green "Free exit".
+  String get freeReason {
+    if (sessionType == 'PASS') {
+      return 'Pass holder — covered by their monthly pass.';
+    }
+    if (sessionType == 'EXEMPT') return 'Exempt vehicle — never charged.';
+    if (withinGrace) return 'Left within the free period.';
+    if ((validationDiscount ?? 0) > 0 && nothingToCollect) {
+      return 'Fully covered by a shop validation.';
+    }
+    if ((validationDiscount ?? 0) > 0) {
+      return 'A shop validation has been applied.';
+    }
+    if (nothingToCollect && (tariffName ?? '').isEmpty) {
+      // Not a benefit to anyone — the site is giving the stay away by accident.
+      return 'No tariff covers this stay. Nothing can be charged — report this.';
+    }
+    return '';
+  }
+
+  /// The accidental free exit, as opposed to the three legitimate ones.
+  bool get freeForTheWrongReason =>
+      nothingToCollect &&
+      found &&
+      (tariffName ?? '').isEmpty &&
+      sessionType == 'PUBLIC' &&
+      !withinGrace;
 }
 
 /// Response of `POST /parking/exit/confirm` — the receipt.
@@ -714,6 +925,13 @@ class VehicleMovement {
   bool get isLongStay => stillInside && (durationMinutes ?? 0) >= 12 * 60;
 
   bool get forceClosed => sessionStatus == 'FORCE_CLOSED';
+
+  /// The wording shown on the badge and written to the export — defined once so
+  /// the two cannot drift apart. Mirrors the web's statusLabel().
+  String get statusLabel {
+    if (stillInside) return isLongStay ? 'Long stay' : 'Inside';
+    return forceClosed ? 'Force closed' : 'Left';
+  }
 }
 
 /// A page of the movement register plus its totals.

@@ -1073,6 +1073,23 @@ class ApiService {
     return await getRequest(baseUrl2, url);
   }
 
+  /// Site-wise logged in / not logged in counts, as the web dashboard's
+  /// "SITE WISE ATTENDANCE" table shows. Same filter set as the role report.
+  static Future<http.Response> fetchLocationWiseReport(
+      int userId,
+      int organizationId,
+      String selectedLocation,
+      String shiftIds,
+      String selectedRole,
+      String selectedDateRange) async {
+    final String url =
+        'api/facility-management/shiftBasedAttendance/dashboard/attendance/locationwise'
+        '?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds'
+        '&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange';
+
+    return await getRequest(baseUrl2, url);
+  }
+
   static Future<http.Response> fetchRoles(
       int? organizationId, String selectedLocation) async {
     return await getRequest(baseUrl2,
@@ -1234,9 +1251,10 @@ class ApiService {
   }
 
   static Future<http.Response> submitRegisterFace(
-      String empId, File imageFile, 
-      // List<double> embeddings
-      ) async {
+    String empId,
+    File imageFile,
+    // List<double> embeddings
+  ) async {
     final url = Uri.parse(
         '${baseUrl2}api/facility-management/shiftBasedAttendance/register');
 
@@ -1420,6 +1438,12 @@ class ApiService {
 
   /// Lanes for a site. Direction (IN/OUT/BIDIRECTIONAL) decides whether a lane
   /// is valid for entry or exit — the backend rejects an entry on an OUT lane.
+  /// Zones (levels) at a site — used to filter the movement register by level,
+  /// as the web's Zone dropdown does.
+  static Future<http.Response> getParkingZonesBySite(int siteId) async {
+    return await getRequest(baseUrl1, '$_parking/zone/site/$siteId');
+  }
+
   static Future<http.Response> getParkingLanesBySite(int siteId) async {
     return await getRequest(baseUrl1, '$_parking/lane/site/$siteId');
   }
@@ -1427,6 +1451,48 @@ class ApiService {
   /// Live occupancy for the whole site (zone by zone).
   static Future<http.Response> getParkingOccupancyBySite(int siteId) async {
     return await getRequest(baseUrl1, '$_parking/occupancy/site/$siteId');
+  }
+
+  /// Shops that can validate parking at this site.
+  static Future<http.Response> getParkingMerchantsBySite(int siteId) async {
+    return await getRequest(baseUrl1, '$_parking/merchant/site/$siteId');
+  }
+
+  /// Apply a shop's validation to a stay.
+  ///
+  /// The stamped bill is handed over at the barrier with a queue behind it, so
+  /// this is called from the exit screen rather than a separate one — sending
+  /// the cashier elsewhere to re-find the same ticket is how a validation gets
+  /// skipped and the customer charged in full.
+  static Future<http.Response> parkingApplyValidation({
+    required int siteId,
+    required int merchantId,
+    required String ticketNumber,
+    String? billNumber,
+    double? billAmount,
+    int? validatedBy,
+  }) async {
+    final Map<String, dynamic> body = {
+      'siteId': siteId,
+      'merchantId': merchantId,
+      'ticketNumber': ticketNumber,
+      if (billNumber != null && billNumber.trim().isNotEmpty)
+        'billNumber': billNumber.trim(),
+      if (billAmount != null) 'billAmount': billAmount,
+      if (validatedBy != null) 'validatedBy': validatedBy,
+    };
+    return await postRequest(baseUrl1, '$_parking/validation/validate', body);
+  }
+
+  /// What each shop owes for the month's validations.
+  ///
+  /// `month` is an ISO date; the server takes the month it falls in.
+  static Future<http.Response> getParkingRecoveryStatement({
+    required int siteId,
+    required String month,
+  }) async {
+    return await getRequest(baseUrl1,
+        '$_parking/validation/recovery-statement?siteId=$siteId&month=$month');
   }
 
   // --- Entry -----------------------------------------------------------------
@@ -1441,6 +1507,13 @@ class ApiService {
     required String credentialType,
     required String credentialValue,
     required String vehicleType,
+
+    /// The plate actually on the vehicle at the barrier.
+    ///
+    /// Separate from `credentialValue`, which for a pass or tag is the pass or
+    /// tag number. Without this the server cannot compare the two, and anyone
+    /// who knows a live pass number parks free on someone else's pass.
+    String? vehicleNumber,
     int? zoneId,
     int? operatorId,
     int? shiftId,
@@ -1456,6 +1529,8 @@ class ApiService {
       'vehicleType': vehicleType,
       'overrideCapacity': overrideCapacity,
       'syncSource': 'MOBILE',
+      if (vehicleNumber != null && vehicleNumber.trim().isNotEmpty)
+        'vehicleNumber': vehicleNumber.trim(),
       if (zoneId != null) 'zoneId': zoneId,
       if (operatorId != null) 'operatorId': operatorId,
       if (shiftId != null) 'shiftId': shiftId,
@@ -1583,8 +1658,7 @@ class ApiService {
         'vehicleType': vehicleType,
     };
     final query = params.entries
-        .map((e) =>
-            '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
         .join('&');
     return await getRequest(baseUrl1, '$_parking/movement/search?$query');
   }

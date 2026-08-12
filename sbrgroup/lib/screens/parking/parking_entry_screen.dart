@@ -37,6 +37,15 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
   final TextEditingController _overrideReasonController =
       TextEditingController();
 
+  /// The plate the guard is actually looking at.
+  ///
+  /// For a pass or tag the credential is the pass number, which says nothing
+  /// about the car in front of them. Taking the plate as well is what ties the
+  /// two together: a pass quoted for someone else's vehicle is still admitted,
+  /// but charged as a normal visitor.
+  final TextEditingController _vehicleNumberController =
+      TextEditingController();
+
   /// A scanner types into whatever holds focus, so focus returns to the field
   /// after every vehicle — otherwise the operator must tap before each scan.
   final FocusNode _credentialFocus = FocusNode();
@@ -80,6 +89,7 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
   void dispose() {
     _credentialController.dispose();
     _overrideReasonController.dispose();
+    _vehicleNumberController.dispose();
     _credentialFocus.dispose();
     super.dispose();
   }
@@ -159,6 +169,32 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
     return out;
   }
 
+  /// Levels that can still take the vehicle type currently selected.
+  List<ZoneOccupancy> get _levelsWithRoom =>
+      _zones.where((z) => z.takes(_vehicleType)).toList();
+
+  /// The chosen level cannot take this vehicle.
+  ///
+  /// Reached two ways, and both matter: the guard picks a level that was
+  /// already full, or the level they picked fills up while they are working.
+  /// Nothing used to say so until the server refused the admission, by which
+  /// point the driver is at the barrier.
+  bool get _selectedLevelIsFull {
+    if (_selectedZoneId == null) return false;
+    for (final z in _zones) {
+      if (z.zoneId == _selectedZoneId) return !z.takes(_vehicleType);
+    }
+    return false;
+  }
+
+  /// Redirects to a level that has space.
+  void _sendTo(ZoneOccupancy zone) {
+    setState(() {
+      _selectedZoneId = zone.zoneId;
+      _error = null;
+    });
+  }
+
   Future<void> _changeLane() async {
     final changed = await Navigator.push<bool>(
       context,
@@ -190,9 +226,14 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
               'stay would otherwise be recorded against no zone.');
       return;
     }
+    // The override applies when the guard has been offered it — either after a
+    // refusal, or because they deliberately chose a level with no room. Keying
+    // it to the refusal alone meant a deliberate choice was refused, then had
+    // to be repeated.
+    final bool offered = _showOverride || _selectedLevelIsFull;
     final bool overriding =
-        _showOverride && _overrideReasonController.text.trim().isNotEmpty;
-    if (_showOverride && !overriding) {
+        offered && _overrideReasonController.text.trim().isNotEmpty;
+    if (offered && !overriding) {
       setState(() => _error = 'Give a reason before admitting over capacity.');
       return;
     }
@@ -212,6 +253,11 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
         credentialType: _credentialType,
         credentialValue: _credentialController.text.trim(),
         vehicleType: _vehicleType,
+        // MANUAL already puts the plate in credentialValue — sending it twice
+        // would just be the same string in two fields.
+        vehicleNumber: _credentialType == ParkingConstants.channelManual
+            ? null
+            : _vehicleNumberController.text.trim(),
         operatorId: operatorId,
         shiftId: ParkingContext.openShift?.shiftId,
         overrideCapacity: overriding,
@@ -259,6 +305,7 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
   void _clear() {
     _credentialController.clear();
     _overrideReasonController.clear();
+    _vehicleNumberController.clear();
     setState(() {
       _result = null;
       _error = null;
@@ -331,11 +378,6 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
                 _vehicleType = v;
                 // Free counts are per type, so a level chosen for a car may not
                 // take the bike now in front of the barrier.
-                if (_selectedZoneId != null &&
-                    !_zones.any(
-                        (z) => z.zoneId == _selectedZoneId && z.takes(v))) {
-                  _selectedZoneId = null;
-                }
                 _error = null;
               }),
             ),
@@ -366,6 +408,91 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: AppColors.danger,
+                      ),
+                    ),
+                  ],
+                  // A full level stays selectable on purpose: sometimes the
+                  // right answer is to put the car there anyway, and that is
+                  // what the override is for. But the guard has to know before
+                  // the driver is at the barrier, not after the server refuses.
+                  if (_selectedLevelIsFull) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withOpacity(0.09),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: AppColors.warning.withOpacity(0.35)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.warning_amber_rounded,
+                                  color: AppColors.warning, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'This level has no room for a '
+                                  '${ParkingConstants.label(_vehicleType).toLowerCase()}.',
+                                  style: const TextStyle(
+                                      color: AppColors.warning,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (_levelsWithRoom.isNotEmpty) ...[
+                            Text('Send them to:',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary)),
+                            const SizedBox(height: 8),
+                            // Every level with room, each with its free count —
+                            // the guard picks, rather than being given one.
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _levelsWithRoom
+                                  .map((z) => OutlinedButton(
+                                        onPressed: () => _sendTo(z),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.primary,
+                                          side: const BorderSide(
+                                              color: AppColors.primary),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 6),
+                                          minimumSize: const Size(0, 36),
+                                        ),
+                                        child: Text(
+                                          '${z.displayName ?? z.zoneName ?? "Level"} '
+                                          '(${z.freeFor(_vehicleType)})',
+                                          style: const TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 6),
+                            Text('…or admit here with a reason below.',
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: AppColors.textSecondary)),
+                          ] else
+                            Text(
+                              'No level can take this vehicle. Admitting needs '
+                              'a reason below.',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary),
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -423,6 +550,41 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
                       ? 'Enter the ${_credentialLabel.toLowerCase()}'
                       : null,
                 ),
+                if (_credentialType != ParkingConstants.channelManual) ...[
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _vehicleNumberController,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [
+                      UpperCaseTextFormatter(),
+                      LengthLimitingTextInputFormatter(24),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                    ),
+                    cursorColor: AppColors.primary,
+                    decoration:
+                        parkingFieldDecoration('Vehicle Number').copyWith(
+                      hintText: 'The plate on the vehicle',
+                      hintStyle: TextStyle(
+                          color: AppColors.textFaint,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Checked against the plate the pass was issued to. A '
+                    'mismatch is admitted but charged as a normal visitor.',
+                    style: TextStyle(
+                        fontSize: 11.5, color: AppColors.textSecondary),
+                  ),
+                ],
               ],
             ),
           ),
@@ -436,7 +598,7 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
             ),
           ],
 
-          if (_showOverride) ...[
+          if (_showOverride || _selectedLevelIsFull) ...[
             const SizedBox(height: 12),
             ParkingCard(
               title: 'Admit over capacity',
@@ -467,8 +629,9 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
             child: ElevatedButton.icon(
               onPressed: _submitting ? null : _submit,
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _showOverride ? AppColors.warning : AppColors.success,
+                backgroundColor: (_showOverride || _selectedLevelIsFull)
+                    ? AppColors.warning
+                    : AppColors.success,
                 foregroundColor: AppColors.onPrimary,
                 disabledBackgroundColor: AppColors.success.withOpacity(0.45),
                 disabledForegroundColor: AppColors.onPrimary.withOpacity(0.8),
@@ -485,7 +648,9 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
               label: Text(
                 _submitting
                     ? 'Admitting…'
-                    : (_showOverride ? 'ADMIT ANYWAY' : 'ADMIT'),
+                    : ((_showOverride || _selectedLevelIsFull)
+                        ? 'ADMIT ANYWAY'
+                        : 'ADMIT'),
                 style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
@@ -601,19 +766,28 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
     final String badge = z.labelFor(_vehicleType);
 
     return Opacity(
-      opacity: takes ? 1 : 0.45,
+      // Selectable even when full: the guard may deliberately choose it and
+      // override. Refusing the tap meant the choice had to be made twice.
+      opacity: takes ? 1 : 0.6,
       child: InkWell(
-        onTap: takes ? () => setState(() => _selectedZoneId = z.zoneId) : null,
+        onTap: () => setState(() {
+          _selectedZoneId = z.zoneId;
+          _error = null;
+        }),
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
+            // Selected-and-full is a warning state, not a normal selection.
             color: on
-                ? AppColors.primary
-                : AppColors.tint(AppColors.primary, 0.06),
+                ? (takes ? AppColors.primary : AppColors.danger)
+                : AppColors.tint(
+                    takes ? AppColors.primary : AppColors.danger, 0.06),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-                color: on ? AppColors.primary : AppColors.divider,
+                color: on
+                    ? (takes ? AppColors.primary : AppColors.danger)
+                    : (takes ? AppColors.divider : AppColors.danger),
                 width: on ? 1.6 : 1),
           ),
           child: Column(

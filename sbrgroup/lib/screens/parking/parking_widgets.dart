@@ -125,6 +125,85 @@ class ParkingCard extends StatelessWidget {
   }
 }
 
+/// A [ParkingCard] that collapses, for filter panels.
+///
+/// Filters are set once and then read back many times, so on a phone they earn
+/// far less room than the results they produce — left open, the chips and date
+/// pickers push the first row off screen. Collapsed by default, with a summary
+/// of what is actually applied so the panel does not have to be opened just to
+/// find out why the list looks the way it does.
+class ParkingFilterCard extends StatelessWidget {
+  final String title;
+
+  /// One line describing the active filters, shown while collapsed.
+  final String summary;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  const ParkingFilterCard({
+    Key? key,
+    this.title = 'Filters',
+    required this.summary,
+    required this.child,
+    this.initiallyExpanded = false,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      // ExpansionTile draws its own dividers, which fight the card border.
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          iconColor: AppColors.primary,
+          collapsedIconColor: AppColors.textSecondary,
+          leading: Icon(Icons.filter_alt_outlined,
+              size: 20, color: AppColors.primary),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          subtitle: summary.isEmpty
+              ? null
+              : Text(
+                  summary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+          children: [child],
+        ),
+      ),
+    );
+  }
+}
+
 /// Shows the lane the attendant is posted at, with a way to change it.
 ///
 /// Entry cannot happen without a lane, so this doubles as the prompt when

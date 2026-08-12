@@ -49,12 +49,115 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
   ExitLookupResponse? _stay;
   ExitConfirmResponse? _receipt;
 
+  // ── Shop validation, applied here at the barrier.
+  //
+  // The stamped bill is handed over HERE, with a queue behind it. Sending the
+  // cashier to a separate screen to look the same ticket up again is how a
+  // validation gets skipped and the customer charged in full — the shop gave
+  // the discount and the site kept the money.
+  final TextEditingController _billNumberController = TextEditingController();
+  final TextEditingController _billAmountController = TextEditingController();
+  List<ParkingMerchant> _merchants = [];
+  int? _validationMerchantId;
+  bool _showValidation = false;
+  bool _validating = false;
+  String? _validationMessage;
+
   @override
   void initState() {
     super.initState();
     // A cashier without an open drawer cannot take money — refresh so the gate
     // below reflects reality rather than a stale flag.
     _refreshShift();
+    _loadMerchants();
+  }
+
+  Future<void> _loadMerchants() async {
+    if (ParkingContext.siteId == null) return;
+    try {
+      final response =
+          await ApiService.getParkingMerchantsBySite(ParkingContext.siteId!);
+      if (!mounted) return;
+      if (ApiService.isSuccess(response.statusCode)) {
+        final decoded = jsonDecode(response.body);
+        final list = (decoded is List) ? decoded : (decoded['data'] ?? []);
+        setState(() {
+          _merchants = (list as List)
+              .map((e) => ParkingMerchant.fromJson(e as Map<String, dynamic>))
+              .where((m) => m.isActive)
+              .toList();
+        });
+      } else {
+        debugPrint('Merchants failed: HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      // Validation is optional — never block the exit on it.
+      debugPrint('Merchants error: $e');
+    }
+  }
+
+  double get _validationDiscount => _stay?.validationDiscount ?? 0;
+
+  bool get _canApplyValidation =>
+      _validationMerchantId != null &&
+      (_stay?.ticketNumber ?? '').isNotEmpty &&
+      !_validating;
+
+  /// Applies the shop's validation and re-quotes.
+  ///
+  /// Re-quoting rather than adjusting the figure on screen: the discount a shop
+  /// gives is capped by its own rules and by what the stay actually came to, so
+  /// only the server knows the real answer.
+  Future<void> _applyValidation() async {
+    if (!_canApplyValidation || ParkingContext.siteId == null) return;
+    setState(() {
+      _validating = true;
+      _validationMessage = null;
+    });
+    try {
+      final int? userId = await Util.getUserId();
+      final response = await ApiService.parkingApplyValidation(
+        siteId: ParkingContext.siteId!,
+        merchantId: _validationMerchantId!,
+        ticketNumber: _stay!.ticketNumber!,
+        billNumber: _billNumberController.text,
+        billAmount: double.tryParse(_billAmountController.text.trim()),
+        validatedBy: userId,
+      );
+      if (!mounted) return;
+
+      String message = 'Validation applied.';
+      if (ApiService.isSuccess(response.statusCode)) {
+        try {
+          final v = ValidationResponse.fromJson(
+              jsonDecode(response.body) as Map<String, dynamic>);
+          message = v.message ?? message;
+        } catch (_) {}
+        setState(() {
+          _validating = false;
+          _showValidation = false;
+          _validationMessage = message;
+          _billNumberController.clear();
+          _billAmountController.clear();
+        });
+        // The charge has changed, so the quote on screen is stale.
+        _lookup();
+      } else {
+        debugPrint('Validation failed: HTTP ${response.statusCode} '
+            '${response.body}');
+        setState(() {
+          _validating = false;
+          _validationMessage = 'Could not apply the validation.';
+        });
+      }
+    } catch (e) {
+      debugPrint('Validation error: $e');
+      if (!mounted) return;
+      setState(() {
+        _validating = false;
+        _validationMessage = 'Could not apply the validation.';
+      });
+    }
   }
 
   @override
@@ -64,6 +167,8 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
     _referenceController.dispose();
     _waiveReasonController.dispose();
     _waiveAmountController.dispose();
+    _billNumberController.dispose();
+    _billAmountController.dispose();
     _credentialFocus.dispose();
     super.dispose();
   }
@@ -77,9 +182,8 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
 
   double get _due => _stay?.netAmount ?? 0;
 
-  /// Web parity: nothing to collect is decided by the **amount**, not by the
-  /// freeExit / alreadyPaid flags (those are shown as banners but a zero bill is
-  /// what actually skips payment).
+  /// Decided by the amount, as the web does — the freeExit / alreadyPaid flags
+  /// are shown as banners but a zero bill is what skips payment.
   bool get _nothingToCollect => _due <= 0;
 
   double get _tendered => double.tryParse(_tenderedController.text.trim()) ?? 0;
@@ -322,7 +426,12 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
       _waiving = false;
       _paymentMode = ParkingConstants.payCash;
       _credentialType = ParkingConstants.channelTicket;
+      _showValidation = false;
+      _validationMerchantId = null;
+      _validationMessage = null;
     });
+    _billNumberController.clear();
+    _billAmountController.clear();
     _credentialFocus.requestFocus();
   }
 
@@ -652,14 +761,26 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
               color: AppColors.success,
               icon: Icons.verified),
         ],
-        if (s.freeExit) ...[
+        // WHY this stay costs nothing. Three reasons are correct; the fourth —
+        // no tariff covering the stay — is the mall giving the stay away by
+        // accident, and must not look like a benefit.
+        if (s.freeReason.isNotEmpty) ...[
           const SizedBox(height: 12),
           ParkingBanner(
-              text: s.graceRemainingMinutes != null
-                  ? 'Free exit — ${s.graceRemainingMinutes} min of grace left.'
-                  : 'Free exit.',
-              color: AppColors.success,
-              icon: Icons.timer),
+            text: s.freeReason,
+            color:
+                s.freeForTheWrongReason ? AppColors.danger : AppColors.success,
+            icon: s.freeForTheWrongReason
+                ? Icons.report_problem
+                : (s.withinGrace ? Icons.timer : Icons.verified),
+          ),
+        ],
+        if (s.withinGrace && s.graceRemainingMinutes != null) ...[
+          const SizedBox(height: 10),
+          ParkingBanner(
+              text: '${s.graceRemainingMinutes} min of grace left.',
+              color: AppColors.primary,
+              icon: Icons.timer_outlined),
         ],
         ...s.warnings.map((w) => Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -669,6 +790,12 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
                   icon: Icons.warning_amber_rounded),
             )),
 
+        // Nothing left to validate once the money has been taken — offering it
+        // there only invites a discount that can no longer be applied.
+        if (_merchants.isNotEmpty && !s.alreadyPaid) ...[
+          const SizedBox(height: 14),
+          _validationCard(),
+        ],
         if (!_nothingToCollect) ...[
           const SizedBox(height: 14),
           _paymentCard(),
@@ -771,6 +898,140 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
       return 'Cash received is less than ${money(_due)}.';
     }
     return '';
+  }
+
+  Widget _validationCard() {
+    return ParkingCard(
+      title: 'Shop validation',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_validationDiscount > 0)
+            KeyValueRow(
+              label: 'Already applied',
+              value: '- ${money(_validationDiscount)}',
+              valueColor: AppColors.success,
+            ),
+          if (_validationMessage != null) ...[
+            const SizedBox(height: 8),
+            ParkingBanner(
+                text: _validationMessage!,
+                color: AppColors.success,
+                icon: Icons.verified),
+          ],
+          if (!_showValidation) ...[
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _showValidation = true),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              icon: const Icon(Icons.local_offer_outlined, size: 18),
+              label: const Text('Apply a shop validation'),
+            ),
+          ] else ...[
+            const SizedBox(height: 6),
+            Text('Validating shop',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _merchants.map((m) {
+                final bool on = m.merchantId == _validationMerchantId;
+                return InkWell(
+                  onTap: () =>
+                      setState(() => _validationMerchantId = m.merchantId),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: on
+                          ? AppColors.primary
+                          : AppColors.tint(AppColors.primary, 0.06),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: on ? AppColors.primary : AppColors.divider),
+                    ),
+                    child: Text(m.shopName ?? 'Shop ${m.merchantId}',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: on
+                                ? AppColors.onPrimary
+                                : AppColors.textPrimary)),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _billNumberController,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [UpperCaseTextFormatter()],
+                    style: TextStyle(color: AppColors.textPrimary),
+                    cursorColor: AppColors.primary,
+                    decoration: parkingFieldDecoration('Bill no.'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextFormField(
+                    controller: _billAmountController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(color: AppColors.textPrimary),
+                    cursorColor: AppColors.primary,
+                    decoration: parkingFieldDecoration('Bill amount'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _validating
+                        ? null
+                        : () => setState(() => _showValidation = false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      side: BorderSide(color: AppColors.divider),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: (_canApplyValidation && !_validating)
+                        ? _applyValidation
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      disabledBackgroundColor:
+                          AppColors.primary.withOpacity(0.35),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(_validating ? 'Applying…' : 'Apply'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _paymentCard() {
