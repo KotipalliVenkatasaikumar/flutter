@@ -7,6 +7,8 @@ import 'package:ajna/screens/parking/parking_models.dart';
 import 'package:ajna/screens/parking/parking_scan_screen.dart';
 import 'package:ajna/screens/parking/parking_shift_screen.dart';
 import 'package:ajna/screens/parking/parking_widgets.dart';
+import 'package:ajna/screens/parking/printing/receipt_document.dart';
+import 'package:ajna/screens/parking/printing/receipt_print_button.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:ajna/theme/app_colors.dart';
 import 'package:ajna/theme/responsive.dart';
@@ -1294,6 +1296,17 @@ class _ParkingExitScreenState extends State<ParkingExitScreen> {
               icon: Icons.timer_outlined),
         ],
         const SizedBox(height: 20),
+        // The driver is standing there waiting for it, so this comes before
+        // moving on to the next vehicle.
+        ReceiptPrintButton(
+          label: 'Print receipt',
+          document: () => ParkingReceiptBuilder.exitReceipt(
+            r,
+            laneName: ParkingContext.laneName,
+            operatorName: ParkingContext.openShift?.operatorName,
+          ),
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           height: 56,
           child: ElevatedButton.icon(

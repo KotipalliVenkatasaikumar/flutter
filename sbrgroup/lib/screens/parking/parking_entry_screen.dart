@@ -5,6 +5,8 @@ import 'package:ajna/screens/parking/parking_context.dart';
 import 'package:ajna/screens/parking/parking_lane_select_screen.dart';
 import 'package:ajna/screens/parking/parking_models.dart';
 import 'package:ajna/screens/parking/parking_widgets.dart';
+import 'package:ajna/screens/parking/printing/receipt_document.dart';
+import 'package:ajna/screens/parking/printing/receipt_print_button.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:ajna/theme/app_colors.dart';
 import 'package:ajna/theme/responsive.dart';
@@ -906,6 +908,19 @@ class _ParkingEntryScreenState extends State<ParkingEntryScreen> {
               )),
         ],
         const SizedBox(height: 20),
+        // The paper ticket is what exit scans, so printing sits above "next
+        // vehicle" — the operator should not have to go looking for it after
+        // they have already moved on.
+        ReceiptPrintButton(
+          label: 'Print ticket',
+          document: () => ParkingReceiptBuilder.entryTicket(
+            r,
+            siteName: ParkingContext.siteName,
+            laneName: ParkingContext.laneName,
+            operatorName: ParkingContext.openShift?.operatorName,
+          ),
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           height: 56,
           child: ElevatedButton.icon(
