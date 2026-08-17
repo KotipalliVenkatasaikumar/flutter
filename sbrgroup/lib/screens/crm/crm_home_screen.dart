@@ -10,6 +10,7 @@ import 'package:ajna/screens/util.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class CrmHomeScreen extends StatefulWidget {
   const CrmHomeScreen({super.key});
@@ -233,13 +234,16 @@ class _MyDataTableWidgetState extends State<CrmHomeScreen> {
           mini: true,
           child: const Icon(
             Icons.refresh,
-            color: Color.fromRGBO(6, 73, 105, 1), // Change the icon color here
+            color: AppColors.primary, // Change the icon color here
           ), // Set mini to true for a smaller button
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
       bottomNavigationBar: Container(
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.divider)),
+        ),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
         child: RichText(
           text: TextSpan(

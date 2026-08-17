@@ -1,17 +1,27 @@
-import 'package:ajna/screens/api_endpoints.dart';
-import 'package:ajna/screens/util.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/profile/profile_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showBackButton;
   final bool showProfileIcon;
+
+  /// Swap the trailing profile icon for a Home icon.
+  ///
+  /// Set on the Profile screen itself, where tapping "profile" again would just
+  /// push a second copy of the screen you are already on.
+  final bool showHomeIcon;
+
   final VoidCallback? onBackPressed;
 
-  const CustomAppBar({Key? key, this.showBackButton = false, this.showProfileIcon = true, this.onBackPressed}) : super(key: key);
+  const CustomAppBar(
+      {Key? key,
+      this.showBackButton = false,
+      this.showProfileIcon = true,
+      this.showHomeIcon = false,
+      this.onBackPressed})
+      : super(key: key);
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -19,10 +29,23 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+      backgroundColor: Colors.transparent,
+      foregroundColor: AppColors.onPrimary,
+      elevation: 0,
+      // Brand hero: the logo's azure→emerald sweep, shared with the home header.
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: AppColors.heroGradient,
+            stops: AppColors.heroStops,
+          ),
+        ),
+      ),
       leading: showBackButton
           ? IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              icon: const Icon(Icons.arrow_back, color: AppColors.onPrimary),
               onPressed: () {
                 Navigator.pushReplacement(
                   context,
@@ -44,96 +67,40 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
       title: const Text('AJNA',
-          style: TextStyle(color: Colors.white, fontSize: 18)),
+          style: TextStyle(
+            color: AppColors.onPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          )),
+      // Logout deliberately lives on the Profile screen only (account icon →
+      // Logout), not as a bare app-bar icon: unlabelled and next to the profile
+      // button, it was an easy mis-tap that ended the session.
       actions: <Widget>[
         IconButton(
-          icon: const Icon(Icons.logout, color: Colors.white),
-          onPressed: () => _confirmLogout(context),
-        ),
-        IconButton(
-          icon: const Icon(Icons.account_circle, color: Colors.white),
+          tooltip: showHomeIcon ? 'Home' : 'Profile',
+          icon: Icon(
+            showHomeIcon ? Icons.home_rounded : Icons.account_circle,
+            color: AppColors.onPrimary,
+          ),
           onPressed: () {
-            Navigator.push(context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()));
+            if (showHomeIcon) {
+              // Replace rather than push, so repeated Profile → Home trips do
+              // not stack duplicate Home screens on the navigator.
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+              );
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            }
           },
         ),
       ],
     );
-  }
-
-  void _confirmLogout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Confirm Logout"),
-          content: const Text("Are you sure you want to logout?"),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context)
-                  .pop(), // Dismiss the dialog but do not logout
-              child: const Text("Cancel"),
-            ),
-            TextButton(
-              onPressed: () => _logout(context), // Proceed with logging out
-              child: const Text("Logout"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _logout(BuildContext context) async {
-    bool isDeleted = await _deleteDeviceTokenInDatabase();
-
-    if (isDeleted) {
-      print("Logout successful, device token deleted.");
-    } else {
-      print("Logout successful, but failed to delete device token.");
-    }
-
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    // Navigate to the login screen
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-  }
-
-  Future<bool> _deleteDeviceTokenInDatabase() async {
-    try {
-      int? userId = await Util.getUserId();
-      String? androidId = await Util.getUserAndroidId();
-      int? organizationId = await Util.getOrganizationId();
-      String? deviceToken = await Util.getDeviceToken();
-
-      if (userId != null &&
-          androidId != null &&
-          organizationId != null &&
-          deviceToken != null) {
-        final response = await ApiService.deleteDeviceToken(
-            userId, androidId, organizationId, deviceToken);
-
-        if (response.statusCode == 200) {
-          print("Device token deleted successfully.");
-          bool isClearedLocally = await Util.clearDeviceToken();
-          if (isClearedLocally) {
-            print("Device token cleared from both server and local storage.");
-          } else {
-            print("Failed to clear the device token locally.");
-          }
-          return true;
-        } else {
-          print("Failed to delete device token: ${response.body}");
-          return false;
-        }
-      } else {
-        print("Required details are missing; cannot delete device token.");
-        return false;
-      }
-    } catch (e) {
-      print("Error while deleting device token: $e");
-      return false;
-    }
   }
 
   // Future<String?> getAndroidId() async {

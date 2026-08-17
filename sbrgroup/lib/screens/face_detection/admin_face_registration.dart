@@ -12,6 +12,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import 'package:permission_handler/permission_handler.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class UserModel {
   final int userId;
@@ -390,7 +391,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> with 
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 4),
               child: Material(
-                color: Color(0xFF064969).withOpacity(0.85),
+                color: AppColors.primary.withOpacity(0.85),
                 shape: CircleBorder(),
                 child: IconButton(
                   icon: Icon(Icons.switch_camera,
@@ -495,7 +496,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> with 
                     style: TextStyle(
                         color: Colors.white, fontSize: isNarrow ? 13 : 16)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF064969),
+                  backgroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(24)),
                   padding: EdgeInsets.symmetric(
@@ -534,7 +535,20 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> with 
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -566,7 +580,7 @@ class _AdminFaceRegisterScreenState extends State<AdminFaceRegisterScreen> with 
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.person_search, color: Color(0xFF064969)),
+                        Icon(Icons.person_search, color: AppColors.primary),
                         SizedBox(width: 8),
                         Text("Select User",
                             style: Theme.of(context)

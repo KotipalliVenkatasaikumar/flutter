@@ -39,7 +39,8 @@ class NotificationService {
     _androidId = await Util.getUserAndroidId();
     _organizationId = await Util.getOrganizationId();
     _deviceToken = await _messaging.getToken();
-    debugPrint("✅ Device Token: $_deviceToken");
+    // Presence only — the FCM token is a push credential, keep it out of logs.
+    debugPrint("✅ Device token registered.");
 
     if (_deviceToken != null &&
         _androidId != null &&

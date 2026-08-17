@@ -41,3 +41,16 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release signing. Committing these hands anyone who can read the repo the
+# ability to publish an update as us, and the passwords sit in plain text.
+/android/app/keystore/
+/android/app/keystore.properties
+*.jks
+*.keystore
+
+# App Store Connect / Play API credentials, if they are ever added here
+**/ios/Runner/GoogleService-Info.plist.bak
+*.p8
+*.p12
+*.mobileprovision

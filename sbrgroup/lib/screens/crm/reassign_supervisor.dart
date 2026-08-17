@@ -5,6 +5,7 @@ import 'package:ajna/screens/app_bar.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class SupervisorReassign extends StatefulWidget {
   const SupervisorReassign({super.key});
@@ -369,8 +370,7 @@ class _MyDataTableWidgetState extends State<SupervisorReassign> {
                                             'Issue Number:',
                                             style: TextStyle(
                                                 fontSize: 14,
-                                                color: Color.fromRGBO(
-                                                    6, 73, 105, 1)),
+                                                color: AppColors.primary),
                                           ),
                                           Text(
                                             item['issueNumber'].toString(),
@@ -744,14 +744,14 @@ class _MyDataTableWidgetState extends State<SupervisorReassign> {
           mini: true,
           child: const Icon(
             Icons.refresh,
-            color: Color.fromRGBO(6, 73, 105, 1), // Change the icon color here
+            color: AppColors.primary, // Change the icon color here
           ), // Set mini to true for a smaller button
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
       bottomNavigationBar: Container(
         padding: EdgeInsets.zero,
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        color: AppColors.primary,
         //height: 40, // Attempt to set a smaller height
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,

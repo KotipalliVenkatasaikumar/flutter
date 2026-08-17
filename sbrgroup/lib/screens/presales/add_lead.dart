@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:ajna/screens/api_endpoints.dart';
+import 'package:ajna/theme/app_colors.dart';
 import 'package:ajna/screens/util.dart'; // Import dropdown_button2
 
 class LeadStatus {
@@ -360,7 +361,7 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
                     child: TextButton(
                       style: ButtonStyle(
                         backgroundColor: MaterialStateProperty.all<Color>(
-                            const Color.fromRGBO(6, 73, 105, 1)),
+                            AppColors.primary),
                         foregroundColor:
                             MaterialStateProperty.all<Color>(Colors.white),
                       ),
@@ -422,7 +423,20 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: const Text(
           'Add Lead',
           style: TextStyle(
@@ -474,6 +488,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
                   Expanded(
                     flex: 4, // 30% of total width
                     child: DropdownButtonFormField2<String>(
+                      // Size to the field, not to the widest item (overflow guard).
+                      isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Country Code',
                         border: OutlineInputBorder(
@@ -624,6 +640,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
               ),
               SizedBox(height: 10),
               DropdownButtonFormField2<String>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select Gender',
                   border: OutlineInputBorder(
@@ -729,6 +747,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
               SizedBox(height: 10),
               // Source Dropdown
               DropdownButtonFormField2<int>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select Source',
                   border: OutlineInputBorder(
@@ -776,6 +796,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
               SizedBox(height: 10),
 // SubSource Dropdown
               DropdownButtonFormField2<int>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select SubSource',
                   border: OutlineInputBorder(
@@ -817,6 +839,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
 
               SizedBox(height: 10),
               DropdownButtonFormField2<int>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select Type',
                   border: OutlineInputBorder(
@@ -858,6 +882,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
 
               SizedBox(height: 10),
               DropdownButtonFormField2<int>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select Status',
                   border: OutlineInputBorder(
@@ -900,6 +926,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
               ),
               SizedBox(height: 10),
               DropdownButtonFormField2<int>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select Project',
                   border: OutlineInputBorder(
@@ -944,6 +972,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
               SizedBox(height: 10),
 
               DropdownButtonFormField2<UnitType>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select Unit Type',
                   border: OutlineInputBorder(
@@ -985,6 +1015,8 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
 
               SizedBox(height: 10),
               DropdownButtonFormField2<String>(
+                // Size to the field, not to the widest item (overflow guard).
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Select Budget',
                   border: OutlineInputBorder(

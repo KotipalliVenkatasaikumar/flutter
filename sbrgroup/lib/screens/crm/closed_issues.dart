@@ -8,6 +8,7 @@ import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class ClosedIssues extends StatefulWidget {
   const ClosedIssues({super.key});
@@ -364,14 +365,14 @@ class _MyDataTableWidgetState extends State<ClosedIssues> {
           mini: true,
           child: const Icon(
             Icons.refresh,
-            color: Color.fromRGBO(6, 73, 105, 1), // Change the icon color here
+            color: AppColors.primary, // Change the icon color here
           ), // Set mini to true for a smaller button
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
       bottomNavigationBar: Container(
         padding: EdgeInsets.zero,
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        color: AppColors.primary,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[

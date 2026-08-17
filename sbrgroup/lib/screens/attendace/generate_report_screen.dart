@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class GenerateReportScreen extends StatefulWidget {
   final List locations;
@@ -242,7 +243,20 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
     double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Text(
           'Attendance Report',
           style: TextStyle(
@@ -252,7 +266,6 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
         ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 2,
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -272,11 +285,14 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                       child: Column(
                         children: [
                           DropdownButtonFormField2<String>(
+                            // Without this the field sizes itself to the
+                            // WIDEST item and overflows the row.
+                            isExpanded: true,
                             value: selectedMonth,
                             decoration: InputDecoration(
                               labelText: 'Month',
                               prefixIcon: const Icon(Icons.calendar_month,
-                                  color: Color.fromRGBO(6, 73, 105, 1)),
+                                  color: AppColors.primary),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12)),
                               contentPadding: const EdgeInsets.symmetric(
@@ -308,11 +324,14 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                           ),
                           const SizedBox(height: 20),
                           DropdownButtonFormField2<String>(
+                            // Without this the field sizes itself to the
+                            // WIDEST item and overflows the row.
+                            isExpanded: true,
                             value: selectedYear,
                             decoration: InputDecoration(
                               labelText: 'Year',
                               prefixIcon: const Icon(Icons.calendar_today,
-                                  color: Color.fromRGBO(6, 73, 105, 1)),
+                                  color: AppColors.primary),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12)),
                               contentPadding: const EdgeInsets.symmetric(
@@ -344,11 +363,14 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                           ),
                           const SizedBox(height: 20),
                           DropdownButtonFormField2<String>(
+                            // Without this the field sizes itself to the
+                            // WIDEST item and overflows the row.
+                            isExpanded: true,
                             value: selectedLocation,
                             decoration: InputDecoration(
                               labelText: 'Location',
                               prefixIcon: const Icon(Icons.location_on,
-                                  color: Color.fromRGBO(6, 73, 105, 1)),
+                                  color: AppColors.primary),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12)),
                               contentPadding: const EdgeInsets.symmetric(
@@ -360,7 +382,13 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                                 .map<DropdownMenuItem<String>>((loc) {
                               return DropdownMenuItem(
                                 value: loc.id.toString(),
-                                child: Text(loc.location),
+                                // Long site names now truncate instead of
+                                // forcing the field wider than the screen.
+                                child: Text(
+                                  loc.location,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList(),
                             onChanged: (v) {
@@ -393,7 +421,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                       label: const Text('Generate Report',
                           style: TextStyle(fontSize: 18)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+                        backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(

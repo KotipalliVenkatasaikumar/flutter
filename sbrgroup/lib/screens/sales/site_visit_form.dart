@@ -8,6 +8,7 @@ import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/home_screen.dart';
 import 'package:ajna/screens/util.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class LeadSource {
   final String name;
@@ -616,7 +617,7 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
               child: TextButton(
                 style: ButtonStyle(
                   backgroundColor: MaterialStateProperty.all<Color>(
-                      const Color.fromRGBO(6, 73, 105, 1)),
+                      AppColors.primary),
                   foregroundColor:
                       MaterialStateProperty.all<Color>(Colors.white),
                 ),
@@ -695,7 +696,20 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: const Text(
           'Site Visit Form',
           style: TextStyle(
@@ -752,6 +766,8 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
                         Expanded(
                           flex: 4,
                           child: DropdownButtonFormField2<String>(
+                            // Size to the field, not to the widest item (overflow guard).
+                            isExpanded: true,
                             decoration: InputDecoration(
                               labelText: 'Country Code',
                               border: OutlineInputBorder(
@@ -867,6 +883,8 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField2<int>(
+                      // Size to the field, not to the widest item (overflow guard).
+                      isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Select Project',
                         border: OutlineInputBorder(
@@ -1054,6 +1072,8 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
 
                     const SizedBox(height: 16),
                     DropdownButtonFormField2<int>(
+                      // Size to the field, not to the widest item (overflow guard).
+                      isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Select Flat Type',
                         border: OutlineInputBorder(
@@ -1102,6 +1122,8 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField2<String>(
+                      // Size to the field, not to the widest item (overflow guard).
+                      isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Select Budget',
                         border: OutlineInputBorder(
@@ -1151,6 +1173,8 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
                     const SizedBox(height: 16),
 
                     DropdownButtonFormField2<int>(
+                      // Size to the field, not to the widest item (overflow guard).
+                      isExpanded: true,
                       value: _sources
                               .map((e) => e.leadSourceId)
                               .contains(_selectedLeadSourceId)
@@ -1206,6 +1230,8 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
                     const SizedBox(height: 10),
 // SubSource Dropdown
                     DropdownButtonFormField2<int>(
+                      // Size to the field, not to the widest item (overflow guard).
+                      isExpanded: true,
                       value: _subSources
                               .map((e) => e.leadSubSourceId)
                               .contains(_selectedSubSource)
@@ -1307,6 +1333,8 @@ class _SiteVisitFormState extends State<SiteVisitForm> {
                     const SizedBox(height: 16),
 
                     DropdownButtonFormField2<int>(
+                      // Size to the field, not to the widest item (overflow guard).
+                      isExpanded: true,
                       value:
                           _users.map((e) => e.userId).contains(_selectedUserId)
                               ? _selectedUserId

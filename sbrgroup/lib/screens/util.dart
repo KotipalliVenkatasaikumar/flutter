@@ -1,13 +1,15 @@
 import 'dart:convert';
 import 'package:ajna/screens/api_endpoints.dart';
-import 'package:android_intent_plus/android_intent.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Util {
   static Future<void> saveUserData(Map<String, dynamic> userData) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('accessToken', userData['accessToken']);
-    print('Access token saved: ${userData['accessToken']}');
+    // Never log the token itself — logcat is readable by other tooling and the
+    // JWT is a full session credential.
+    debugPrint('Access token saved.');
     await prefs.setString('token', userData['token']);
     await prefs.setInt('userId', userData['userDto']['userId']);
     await prefs.setString('userName', userData['userDto']['userName']);
@@ -54,9 +56,9 @@ class Util {
 
   static Future<String?> getAccessToken() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('accessToken');
-    print('Retrieveeed accessToken: $token');
-    return token;
+    // Deliberately silent: this runs on EVERY API call, so logging here both
+    // spammed logcat and leaked the session JWT on every request.
+    return prefs.getString('accessToken');
   }
 
   static Future<String?> getToken() async {
@@ -186,14 +188,4 @@ class Util {
     }
   }
 
-  static Future<void> installApk(String savePath) async {
-    // Launch the APK installer using AndroidIntent
-    final AndroidIntent intent = AndroidIntent(
-      action: 'android.intent.action.VIEW',
-      data: 'file://$savePath',
-      type: 'application/vnd.android.package-archive',
-      flags: [268435456], // FLAG_ACTIVITY_NEW_TASK
-    );
-    await intent.launch();
-  }
 }

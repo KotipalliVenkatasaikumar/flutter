@@ -6,17 +6,20 @@ import 'package:ajna/screens/face_detection/face_detection.dart';
 import 'package:ajna/screens/face_detection/logout_face_detection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 
 class AttendanceDashboardScreen extends StatefulWidget {
   @override
-  _AttendanceDashboardScreenState createState() => _AttendanceDashboardScreenState();
+  _AttendanceDashboardScreenState createState() =>
+      _AttendanceDashboardScreenState();
 }
 
 class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
   List<dynamic> _projects = [];
   int? _selectedProjectId;
   String _selectedProjectName = '';
-  
+
   bool _isLoading = true;
   int? _userId;
   int? _organizationId;
@@ -81,8 +84,6 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
     await prefs.setString('selectedProjectName', projectName);
   }
 
-  
-
   Future<void> _markAttendance(bool isLogin) async {
     if (_selectedProjectId == null) return;
     // Navigate to face screen
@@ -110,7 +111,20 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
       // ),
 
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -141,7 +155,6 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                             height: 100,
                             width: 100,
                           ),
-                          
                         ],
                       ),
                     ),
@@ -151,7 +164,8 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                         children: [
                           Text(
                             'Location: $_selectedProjectName',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           SizedBox(height: 40),
                           SizedBox(
@@ -165,7 +179,9 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                              child: Text('Login', style: TextStyle(color: Colors.white, fontSize: 20)),
+                              child: Text('Login',
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 20)),
                             ),
                           ),
                           SizedBox(height: 20),
@@ -180,7 +196,9 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                              child: Text('Logout', style: TextStyle(color: Colors.white, fontSize: 20)),
+                              child: Text('Logout',
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 20)),
                             ),
                           ),
                         ],
@@ -193,7 +211,11 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                   : GridView.builder(
                       padding: EdgeInsets.all(16),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
+                        crossAxisCount: gridColumns(
+                          MediaQuery.of(context).size.width,
+                          minColumns: 2,
+                          tileTarget: 200,
+                        ),
                         childAspectRatio: 1.5,
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
@@ -206,7 +228,8 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                           onTap: () => _selectProject(project),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: isSelected ? Colors.blue : Colors.grey[200],
+                              color:
+                                  isSelected ? Colors.blue : Colors.grey[200],
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: Colors.grey),
                             ),
@@ -215,7 +238,9 @@ class _AttendanceDashboardScreenState extends State<AttendanceDashboardScreen> {
                                 project['location'] ?? 'Unknown',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
                                 ),
                                 textAlign: TextAlign.center,
                               ),

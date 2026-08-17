@@ -1,18 +1,16 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/facility_management/reports_projects.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:ajna/theme/app_colors.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-//import 'package:flutter/services.dart';
+import 'package:flutter/services.dart';
 
 //import 'package:local_auth/local_auth.dart';
 import 'package:logger/logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
 //import 'package:pattern_lock/pattern_lock.dart';
 import 'package:permission_handler/permission_handler.dart';
 //import 'package:pin_code_fields/pin_code_fields.dart';
@@ -24,6 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'screens/notification/notification_service.dart';
+import 'package:ajna/theme/responsive.dart';
 
 // Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -43,11 +42,30 @@ class MyApp extends StatelessWidget {
     final ConnectivityHandler connectivityHandler = ConnectivityHandler();
     return MaterialApp(
       title: 'AJNA',
+      // Root theme seeded from the Ajna logo's azure chevron, so every Material
+      // default (ripples, selection handles, spinners, cursors) lands on-brand
+      // instead of the old lilac fallback. Screen-level colours come from
+      // AppColors — see lib/theme/app_colors.dart.
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromRGBO(238, 244, 246, 1),
+          seedColor: AppColors.primary,
+          primary: AppColors.primary,
+          secondary: AppColors.accent,
         ),
+        scaffoldBackgroundColor: AppColors.bg,
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light,
+            statusBarBrightness: Brightness.dark,
+          ),
+        ),
+        progressIndicatorTheme:
+            const ProgressIndicatorThemeData(color: AppColors.primary),
       ),
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
@@ -107,15 +125,10 @@ class _LoginPageState extends State<LoginPage> {
   bool _isObscured = true;
 
   String _currentVersion = '';
-  bool _isUpdateAvailable = false;
-  String _apkUrl = 'http://www.corenuts.com/ajna-app-release.apk';
 
   String _errorMessage = '';
   final logger = Logger();
   //final LocalAuthentication _localAuthentication = LocalAuthentication();
-
-  bool _isDownloading = false; // Add downloading state
-  double _downloadProgress = 0.0; // Add download progress
 
   String? androidId;
 
@@ -123,9 +136,27 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     _getAndroidId();
-    _checkForUpdate();
+    _loadAppVersion();
+    _checkSession();
     _checkLoginStatus();
     _requestPermissions();
+  }
+
+  /// Reads the installed version straight from the package for the "Version:"
+  /// label at the bottom of the login screen. Previously this was a side effect
+  /// of the in-app update check; the app now updates through the App Store /
+  /// Play Store, so the version is read locally.
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _currentVersion = packageInfo.version;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error reading app version: $e');
+    }
   }
 
   Future<String?> getAndroidId() async {
@@ -153,7 +184,14 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _checkForUpdate() async {
+  /// Validates the stored session on launch.
+  ///
+  /// This call used to double as the in-app APK update check. The app now ships
+  /// through the App Store / Play Store, so the version comparison and APK
+  /// download were removed — but the 401 branch is unrelated to updating and is
+  /// still load-bearing: it clears a stale session and pushes the user back to
+  /// login. Only that behaviour remains.
+  Future<void> _checkSession() async {
     try {
       final response = await ApiService.checkForUpdate();
 
@@ -201,54 +239,9 @@ class _LoginPageState extends State<LoginPage> {
         });
 
         return; // Early return since session expired
-      } else if (response.statusCode == 200) {
-        final latestVersion = jsonDecode(response.body)['commonRefValue'];
-        final packageInfo = await PackageInfo.fromPlatform();
-        final currentVersion = packageInfo.version;
-
-        setState(() {
-          _currentVersion = currentVersion; // Store current version
-        });
-
-        if (latestVersion != currentVersion) {
-          final apkUrlResponse = await ApiService.getApkDownloadUrl();
-          if (apkUrlResponse.statusCode == 200) {
-            _apkUrl = jsonDecode(apkUrlResponse.body)['commonRefValue'];
-            setState(() {
-              _isUpdateAvailable = true;
-            });
-
-            // bool isDeleted = await Util.deleteDeviceTokenInDatabase();
-
-            // if (isDeleted) {
-            //   print("Logout successful, device token deleted.");
-            // } else {
-            //   print("Logout successful, but failed to delete device token.");
-            // }
-
-            // // Clear user session data
-            // SharedPreferences prefs = await SharedPreferences.getInstance();
-            // await prefs.clear();
-
-            // Show update dialog
-            _showUpdateDialog(_apkUrl);
-          } else {
-            print(
-                'Failed to fetch APK download URL: ${apkUrlResponse.statusCode}');
-          }
-        } else {
-          setState(() {
-            _isUpdateAvailable = false;
-          });
-        }
-      } else {
-        print('Failed to fetch latest app version: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error checking for update: $e');
-      setState(() {
-        _isUpdateAvailable = false;
-      });
+      debugPrint('Error checking session: $e');
     }
   }
 
@@ -256,76 +249,7 @@ class _LoginPageState extends State<LoginPage> {
     await Permission.storage.request();
   }
 
-  Future<void> downloadAndInstallAPK(String url) async {
-    Dio dio = Dio();
-    String savePath = await getFilePath('ajna-app-release.apk');
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0.0;
-    });
-
-    try {
-      await dio.download(
-        url,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            setState(() {
-              _downloadProgress = received / total;
-            });
-          }
-        },
-      );
-
-      setState(() {
-        _isDownloading = false;
-      });
-
-      await Util.installApk(savePath);
-    } catch (e) {
-      print('Download error: $e');
-      setState(() {
-        _isDownloading = false;
-      });
-    }
-  }
-
-  void _showUpdateDialog(String apkUrl) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        barrierDismissible: false, // Prevent dialog from closing on tap outside
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Update Available'),
-            content: const Text(
-                'A new version of the app is available. Please update.'),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop(); // Dismiss dialog
-                  await downloadAndInstallAPK(apkUrl);
-                },
-                child: const Text('Update'),
-              ),
-            ],
-          );
-        },
-      );
-    });
-  }
-
-  Future<String> getFilePath(String fileName) async {
-    Directory tempDir = await getTemporaryDirectory();
-    String tempPath = tempDir.path;
-    return '$tempPath/$fileName';
-  }
-
   Future<void> _login() async {
-    if (_isUpdateAvailable) {
-      return;
-    }
-
     if (_formKey.currentState != null && _formKey.currentState!.validate()) {
       final email = _emailController.text;
       final password = _passwordController.text;
@@ -420,300 +344,315 @@ class _LoginPageState extends State<LoginPage> {
             fit: BoxFit.cover,
           ),
         ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                height: 100,
-                child: Image.asset('lib/assets/images/ajna.png'),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'AJNA',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.normal,
-                  color: Color.fromARGB(255, 252, 252, 252),
-                ),
-              ),
-              // Text(
-              //   androidId ?? 'Fetching Android ID...',
-              //   style: TextStyle(
-              //     fontSize: 22,
-              //     fontWeight: FontWeight.normal,
-              //     color: Color.fromARGB(255, 252, 252, 252),
-              //   ),
-              // ),
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 30, horizontal: 60),
-                child: _isDownloading
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(value: _downloadProgress),
-                            const SizedBox(height: 16.0),
-                            Text(
-                              'Downloading update: ${(_downloadProgress * 100).toStringAsFixed(0)}%',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ],
+        child: SafeArea(
+          // Was a bare Center>Column: in landscape, on a tablet, or with the
+          // keyboard up it had nowhere to go and overflowed. The minHeight
+          // keeps the form vertically centred when there IS room — a plain
+          // scroll view would pin it to the top on a tall tablet screen.
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(minHeight: constraints.maxHeight - 48),
+                child: ContentWidthLimit(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          height: 100,
+                          child: Image.asset('lib/assets/images/ajna.png'),
                         ),
-                      )
-                    : Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            TextFormField(
-                              controller: _emailController,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Colors.black.withOpacity(0.7),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  borderSide: const BorderSide(
-                                    color: Color.fromARGB(255, 255, 255, 255),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  borderSide: const BorderSide(
-                                    color: Color.fromARGB(255, 255, 255, 255),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  borderSide: const BorderSide(
-                                    color: Color.fromARGB(255, 255, 255, 255),
-                                    width: 2.0,
-                                  ),
-                                ),
-                                prefixIcon: const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.mail,
-                                        color: Color.fromARGB(
-                                            255, 193, 190, 190), // icon color
+                        const SizedBox(height: 20),
+                        const Text(
+                          'AJNA',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.normal,
+                            color: Color.fromARGB(255, 252, 252, 252),
+                          ),
+                        ),
+                        // Text(
+                        //   androidId ?? 'Fetching Android ID...',
+                        //   style: TextStyle(
+                        //     fontSize: 22,
+                        //     fontWeight: FontWeight.normal,
+                        //     color: Color.fromARGB(255, 252, 252, 252),
+                        //   ),
+                        // ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 30, horizontal: 60),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                TextFormField(
+                                  controller: _emailController,
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor: Colors.black.withOpacity(0.7),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide: const BorderSide(
+                                        color:
+                                            Color.fromARGB(255, 255, 255, 255),
                                       ),
-                                      SizedBox(width: 5),
-                                      Text(
-                                        '|',
-                                        style: TextStyle(
-                                          color: Color.fromARGB(255, 193, 190,
-                                              190), // pipe symbol color
-                                          fontSize: 18,
-                                        ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide: const BorderSide(
+                                        color:
+                                            Color.fromARGB(255, 255, 255, 255),
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                labelText: 'Email',
-                                labelStyle: const TextStyle(
-                                  color: Color.fromARGB(255, 193, 190, 190),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 0,
-                                  horizontal: 50,
-                                ),
-                              ),
-                              style: const TextStyle(
-                                color: Colors.white, // entered text color
-                              ),
-                              validator: (value) {
-                                if (value?.isEmpty ?? true) {
-                                  logger.w('Email field is empty');
-                                  return 'Please enter your email';
-                                }
-                                return null;
-                              },
-                            ),
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 20),
-                            ),
-                            TextFormField(
-                              controller: _passwordController,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Colors.black.withOpacity(0.6),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  borderSide: const BorderSide(
-                                    color: Color.fromARGB(255, 255, 255, 255),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  borderSide: const BorderSide(
-                                    color: Color.fromARGB(255, 255, 255, 255),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  borderSide: const BorderSide(
-                                    color: Color.fromARGB(255, 255, 255, 255),
-                                    width: 2.0,
-                                  ),
-                                ),
-                                prefixIcon: const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.password,
-                                        color: Color.fromARGB(
-                                            255, 193, 190, 190), // icon color
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide: const BorderSide(
+                                        color:
+                                            Color.fromARGB(255, 255, 255, 255),
+                                        width: 2.0,
                                       ),
-                                      SizedBox(width: 5),
-                                      Text(
-                                        '|',
-                                        style: TextStyle(
-                                          color: Color.fromARGB(255, 193, 190,
-                                              190), // pipe symbol color
-                                          fontSize: 18,
-                                        ),
+                                    ),
+                                    prefixIcon: const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.mail,
+                                            color: Color.fromARGB(255, 193, 190,
+                                                190), // icon color
+                                          ),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            '|',
+                                            style: TextStyle(
+                                              color: Color.fromARGB(
+                                                  255,
+                                                  193,
+                                                  190,
+                                                  190), // pipe symbol color
+                                              fontSize: 18,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
+                                    labelText: 'Email',
+                                    labelStyle: const TextStyle(
+                                      color: Color.fromARGB(255, 193, 190, 190),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 0,
+                                      horizontal: 50,
+                                    ),
                                   ),
-                                ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _isObscured
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                    color: const Color.fromARGB(
-                                        255, 193, 190, 190),
+                                  style: const TextStyle(
+                                    color: Colors.white, // entered text color
                                   ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _isObscured =
-                                          !_isObscured; // Toggle password visibility
-                                    });
+                                  validator: (value) {
+                                    if (value?.isEmpty ?? true) {
+                                      logger.w('Email field is empty');
+                                      return 'Please enter your email';
+                                    }
+                                    return null;
                                   },
                                 ),
-                                labelText: 'Password',
-                                labelStyle: const TextStyle(
-                                  color: Color.fromARGB(255, 193, 190, 190),
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 20),
                                 ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 0,
-                                  horizontal: 10,
+                                TextFormField(
+                                  controller: _passwordController,
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor: Colors.black.withOpacity(0.6),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide: const BorderSide(
+                                        color:
+                                            Color.fromARGB(255, 255, 255, 255),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide: const BorderSide(
+                                        color:
+                                            Color.fromARGB(255, 255, 255, 255),
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide: const BorderSide(
+                                        color:
+                                            Color.fromARGB(255, 255, 255, 255),
+                                        width: 2.0,
+                                      ),
+                                    ),
+                                    prefixIcon: const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.password,
+                                            color: Color.fromARGB(255, 193, 190,
+                                                190), // icon color
+                                          ),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            '|',
+                                            style: TextStyle(
+                                              color: Color.fromARGB(
+                                                  255,
+                                                  193,
+                                                  190,
+                                                  190), // pipe symbol color
+                                              fontSize: 18,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _isObscured
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
+                                        color: const Color.fromARGB(
+                                            255, 193, 190, 190),
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isObscured =
+                                              !_isObscured; // Toggle password visibility
+                                        });
+                                      },
+                                    ),
+                                    labelText: 'Password',
+                                    labelStyle: const TextStyle(
+                                      color: Color.fromARGB(255, 193, 190, 190),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 0,
+                                      horizontal: 10,
+                                    ),
+                                  ),
+                                  style: const TextStyle(
+                                    color: Colors.white, // entered text color
+                                  ),
+                                  obscureText:
+                                      _isObscured, // Control whether to obscure text
+                                  validator: (value) {
+                                    if (value?.isEmpty ?? true) {
+                                      logger.w('Password field is empty');
+                                      return 'Please enter your password';
+                                    }
+                                    return null;
+                                  },
                                 ),
-                              ),
-                              style: const TextStyle(
-                                color: Colors.white, // entered text color
-                              ),
-                              obscureText:
-                                  _isObscured, // Control whether to obscure text
-                              validator: (value) {
-                                if (value?.isEmpty ?? true) {
-                                  logger.w('Password field is empty');
-                                  return 'Please enter your password';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(
-                              height: 20.0,
-                            ),
-                            InkWell(
-                              onTap: _navigateToForgetPasswordScreen,
-                              child: const Text(
-                                'Forgot Password',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Color.fromARGB(255, 255, 255, 255),
+                                const SizedBox(
+                                  height: 20.0,
                                 ),
-                                textAlign: TextAlign.right,
-                              ),
+                                InkWell(
+                                  onTap: _navigateToForgetPasswordScreen,
+                                  child: const Text(
+                                    'Forgot Password',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Color.fromARGB(255, 255, 255, 255),
+                                    ),
+                                    textAlign: TextAlign.right,
+                                  ),
+                                ),
+                                const SizedBox(
+                                  height: 20.0,
+                                ),
+                                ElevatedButton(
+                                  onPressed: _login,
+                                  style: ButtonStyle(
+                                    backgroundColor: WidgetStateProperty.all(
+                                        AppColors.primary),
+                                  ),
+                                  child: const Text(
+                                    'Login',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                if (_errorMessage.isNotEmpty)
+                                  Text(
+                                    _errorMessage,
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                              ],
                             ),
-                            const SizedBox(
-                              height: 20.0,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 100),
+                          child: RichText(
+                            text: TextSpan(
+                              children: [
+                                const TextSpan(
+                                  text: 'Powered by ',
+                                  style: TextStyle(
+                                    color: Color.fromARGB(255, 186, 183, 183),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: 'Core',
+                                  style: const TextStyle(
+                                    color: Color.fromARGB(255, 37, 219, 9),
+                                    fontSize: 14,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () {
+                                      //ignore: deprecated_member_use
+                                      launch('https://www.corenuts.com');
+                                    },
+                                ),
+                                TextSpan(
+                                  text: 'Nuts',
+                                  style: const TextStyle(
+                                    color: Color.fromARGB(255, 221, 10, 10),
+                                    fontSize: 14,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () {
+                                      //ignore: deprecated_member_use
+                                      launch('https://www.corenuts.com');
+                                    },
+                                ),
+                                const TextSpan(
+                                  text: ' Technologies',
+                                  style: TextStyle(
+                                    color: Color.fromARGB(255, 186, 183,
+                                        183), // Choose a suitable color
+                                    fontSize: 12,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ],
                             ),
-                            ElevatedButton(
-                              onPressed: _login,
-                              style: ButtonStyle(
-                                backgroundColor: WidgetStateProperty.all(
-                                    const Color.fromRGBO(6, 73, 105, 1)),
-                              ),
-                              child: const Text(
-                                'Login',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            if (_errorMessage.isNotEmpty)
-                              Text(
-                                _errorMessage,
-                                style: const TextStyle(color: Colors.red),
-                              ),
-                          ],
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                      ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 100),
-                child: RichText(
-                  text: TextSpan(
-                    children: [
-                      const TextSpan(
-                        text: 'Powered by ',
-                        style: TextStyle(
-                          color: Color.fromARGB(255, 186, 183, 183),
-                          fontSize: 12,
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Text(
+                            'Version: $_currentVersion',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
                         ),
-                      ),
-                      TextSpan(
-                        text: 'Core',
-                        style: const TextStyle(
-                          color: Color.fromARGB(255, 37, 219, 9),
-                          fontSize: 14,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            //ignore: deprecated_member_use
-                            launch('https://www.corenuts.com');
-                          },
-                      ),
-                      TextSpan(
-                        text: 'Nuts',
-                        style: const TextStyle(
-                          color: Color.fromARGB(255, 221, 10, 10),
-                          fontSize: 14,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            //ignore: deprecated_member_use
-                            launch('https://www.corenuts.com');
-                          },
-                      ),
-                      const TextSpan(
-                        text: ' Technologies',
-                        style: TextStyle(
-                          color: Color.fromARGB(
-                              255, 186, 183, 183), // Choose a suitable color
-                          fontSize: 12,
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Version: $_currentVersion',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

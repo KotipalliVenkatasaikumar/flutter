@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ajna/screens/attendace/attendace_scan.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -59,7 +60,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         title: const Text(
           'FO Visit',
           style: TextStyle(
@@ -170,16 +184,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
       bottomNavigationBar: Container(
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.divider)),
+        ),
         padding: EdgeInsets.symmetric(
             vertical: screenHeight * 0.02, horizontal: screenWidth * 0.05),
         child: RichText(
           text: TextSpan(
             children: [
-              const TextSpan(
+              TextSpan(
                 text: 'Powered by ',
                 style: TextStyle(
-                  color: Color.fromARGB(255, 230, 227, 227),
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
               ),
@@ -205,10 +222,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     launchUrl(Uri.parse('https://www.corenuts.com'));
                   },
               ),
-              const TextSpan(
+              TextSpan(
                 text: ' Technologies',
                 style: TextStyle(
-                  color: Color.fromARGB(255, 230, 227, 227),
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
               ),

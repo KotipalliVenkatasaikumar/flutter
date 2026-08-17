@@ -6,6 +6,7 @@ import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/error_handler.dart';
 import 'package:ajna/screens/home_screen.dart';
 import 'custom_date_picker.dart';
+import 'package:ajna/theme/app_colors.dart';
 
 class User {
   final String username;
@@ -126,7 +127,20 @@ class _UserScreenState extends State<UserScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(6, 73, 105, 1),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.onPrimary,
+        elevation: 0,
+        // Brand hero gradient — matches CustomAppBar and the home header.
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.heroGradient,
+              stops: AppColors.heroStops,
+            ),
+          ),
+        ),
         iconTheme: const IconThemeData(
           color: Colors.white,
         ),
@@ -240,7 +254,7 @@ class _UserScreenState extends State<UserScreen> {
       ),
       bottomNavigationBar: Container(
         padding: EdgeInsets.zero,
-        color: const Color.fromRGBO(6, 73, 105, 1),
+        color: AppColors.primary,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[

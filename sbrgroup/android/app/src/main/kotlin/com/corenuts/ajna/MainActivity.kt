@@ -1,4 +1,4 @@
-package com.example.ajna
+package com.corenuts.ajna
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -26,6 +26,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        ParkingPrinterPlugin.register(flutterEngine)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler {
                 call, result ->

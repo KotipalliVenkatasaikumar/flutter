@@ -5,6 +5,7 @@ import 'package:ajna/screens/app_bar.dart';
 import 'package:ajna/screens/crm/fancy_spinner.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:http/http.dart' as http;
+import 'package:ajna/theme/app_colors.dart';
 
 class OpenIssuesTableWidget extends StatefulWidget {
   const OpenIssuesTableWidget({super.key});
@@ -457,7 +458,7 @@ class _MyDataTableWidgetState extends State<OpenIssuesTableWidget> {
           mini: true,
           child: const Icon(
             Icons.refresh,
-            color: Color.fromRGBO(6, 73, 105, 1), // Change the icon color here
+            color: AppColors.primary, // Change the icon color here
           ), // Set mini to true for a smaller button
         ),
       ),

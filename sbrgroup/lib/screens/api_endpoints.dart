@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:ajna/screens/util.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart' as path;
@@ -61,7 +62,10 @@ class ApiService {
       accessToken = await Util
           .getAccessToken(); // Ensure Util.getAccessToken() is defined
       token = await Util.getToken();
-      print('AccessToken in initialize: $accessToken');
+      // Log presence only — never the token value (it is a session credential
+      // and this runs before every request).
+      debugPrint('Session initialized (token '
+          '${accessToken == null || accessToken!.isEmpty ? "missing" : "present"}).');
     } catch (error) {
       print('Error during initialization: $error');
       // Handle error, e.g., show a snackbar or retry
@@ -273,11 +277,6 @@ class ApiService {
   static Future<http.Response> checkForUpdate() async {
     return await getRequest(
         baseUrl1, 'api/user/commonreferencedetails/mob?refKey=ajna_version');
-  }
-
-  static Future<http.Response> getApkDownloadUrl() async {
-    return await getRequest(
-        baseUrl1, 'api/user/commonreferencedetails/mob?refKey=Url_Ajna');
   }
 
   static Future<http.Response> fetchAdditionalData(int roleId) async {
@@ -1074,6 +1073,23 @@ class ApiService {
     return await getRequest(baseUrl2, url);
   }
 
+  /// Site-wise logged in / not logged in counts, as the web dashboard's
+  /// "SITE WISE ATTENDANCE" table shows. Same filter set as the role report.
+  static Future<http.Response> fetchLocationWiseReport(
+      int userId,
+      int organizationId,
+      String selectedLocation,
+      String shiftIds,
+      String selectedRole,
+      String selectedDateRange) async {
+    final String url =
+        'api/facility-management/shiftBasedAttendance/dashboard/attendance/locationwise'
+        '?userId=$userId&organizationId=$organizationId&shiftIds=$shiftIds'
+        '&locationId=$selectedLocation&roleId=$selectedRole&range=$selectedDateRange';
+
+    return await getRequest(baseUrl2, url);
+  }
+
   static Future<http.Response> fetchRoles(
       int? organizationId, String selectedLocation) async {
     return await getRequest(baseUrl2,
@@ -1235,9 +1251,10 @@ class ApiService {
   }
 
   static Future<http.Response> submitRegisterFace(
-      String empId, File imageFile, 
-      // List<double> embeddings
-      ) async {
+    String empId,
+    File imageFile,
+    // List<double> embeddings
+  ) async {
     final url = Uri.parse(
         '${baseUrl2}api/facility-management/shiftBasedAttendance/register');
 
@@ -1383,5 +1400,314 @@ class ApiService {
         'api/facility-management/shiftBasedAttendance/absentemployees?shiftId=$shiftId&organizationId=$organizationId&locationId=$locationId&userId=$userIdsParam';
     // Use postRequest with an empty body
     return await postRequest(baseUrl1, endpoint, {});
+  }
+
+  // ===========================================================================
+  // PARKING
+  // ---------------------------------------------------------------------------
+  // Front-end for facility-management-service `/parking/*`. All setup (sites,
+  // zones, lanes, tariffs, devices) is done on the WEB admin — the app only
+  // reads the configured sites/lanes and runs the entry / exit / shift flows.
+  // ===========================================================================
+  static const String _parking = 'api/facility-management/parking';
+
+  /// True for any 2xx.
+  ///
+  /// The parking controllers return **201 CREATED** from the POSTs that create
+  /// something — `shift/open` and `exception/raise` — so comparing against 200
+  /// alone reports a successful shift open as a failure.
+  static bool isSuccess(int statusCode) =>
+      statusCode >= 200 && statusCode < 300;
+
+  /// Sites the attendant can pick from (web-configured).
+  ///
+  /// Sites belong to a project, so [projectId] narrows the list to one — an
+  /// operator at Horizon should not be scrolling past Earth & Sky.
+  static Future<http.Response> getParkingSites({
+    int? projectId,
+    String? siteName,
+  }) async {
+    final params = <String>[
+      if (projectId != null) 'projectId=$projectId',
+      if (siteName != null && siteName.trim().isNotEmpty)
+        'siteName=${Uri.encodeQueryComponent(siteName.trim())}',
+    ];
+    final query = params.isEmpty ? '' : '?${params.join('&')}';
+    return await getRequest(baseUrl1, '$_parking/site/getall/sites$query');
+  }
+
+  /// Lanes for a site. Direction (IN/OUT/BIDIRECTIONAL) decides whether a lane
+  /// is valid for entry or exit — the backend rejects an entry on an OUT lane.
+  /// Zones (levels) at a site — used to filter the movement register by level,
+  /// as the web's Zone dropdown does.
+  static Future<http.Response> getParkingZonesBySite(int siteId) async {
+    return await getRequest(baseUrl1, '$_parking/zone/site/$siteId');
+  }
+
+  static Future<http.Response> getParkingLanesBySite(int siteId) async {
+    return await getRequest(baseUrl1, '$_parking/lane/site/$siteId');
+  }
+
+  /// Live occupancy for the whole site (zone by zone).
+  static Future<http.Response> getParkingOccupancyBySite(int siteId) async {
+    return await getRequest(baseUrl1, '$_parking/occupancy/site/$siteId');
+  }
+
+  /// Shops that can validate parking at this site.
+  static Future<http.Response> getParkingMerchantsBySite(int siteId) async {
+    return await getRequest(baseUrl1, '$_parking/merchant/site/$siteId');
+  }
+
+  /// Apply a shop's validation to a stay.
+  ///
+  /// The stamped bill is handed over at the barrier with a queue behind it, so
+  /// this is called from the exit screen rather than a separate one — sending
+  /// the cashier elsewhere to re-find the same ticket is how a validation gets
+  /// skipped and the customer charged in full.
+  static Future<http.Response> parkingApplyValidation({
+    required int siteId,
+    required int merchantId,
+    required String ticketNumber,
+    String? billNumber,
+    double? billAmount,
+    int? validatedBy,
+  }) async {
+    final Map<String, dynamic> body = {
+      'siteId': siteId,
+      'merchantId': merchantId,
+      'ticketNumber': ticketNumber,
+      if (billNumber != null && billNumber.trim().isNotEmpty)
+        'billNumber': billNumber.trim(),
+      if (billAmount != null) 'billAmount': billAmount,
+      if (validatedBy != null) 'validatedBy': validatedBy,
+    };
+    return await postRequest(baseUrl1, '$_parking/validation/validate', body);
+  }
+
+  /// What each shop owes for the month's validations.
+  ///
+  /// `month` is an ISO date; the server takes the month it falls in.
+  static Future<http.Response> getParkingRecoveryStatement({
+    required int siteId,
+    required String month,
+  }) async {
+    return await getRequest(baseUrl1,
+        '$_parking/validation/recovery-statement?siteId=$siteId&month=$month');
+  }
+
+  // --- Entry -----------------------------------------------------------------
+
+  /// Admit a vehicle. `laneId` is mandatory — the backend derives the zone from
+  /// the lane and refuses if the lane is inactive or is an exit lane.
+  ///
+  /// For a normal public entry `credentialType` is MANUAL and `credentialValue`
+  /// is the plate the attendant typed; the ticket is *issued by* this call.
+  static Future<http.Response> parkingSessionEntry({
+    required int laneId,
+    required String credentialType,
+    required String credentialValue,
+    required String vehicleType,
+
+    /// The plate actually on the vehicle at the barrier.
+    ///
+    /// Separate from `credentialValue`, which for a pass or tag is the pass or
+    /// tag number. Without this the server cannot compare the two, and anyone
+    /// who knows a live pass number parks free on someone else's pass.
+    String? vehicleNumber,
+    int? zoneId,
+    int? operatorId,
+    int? shiftId,
+    String? entryImageUrl,
+    bool overrideCapacity = false,
+    String? overrideReason,
+    String? remarks,
+  }) async {
+    final Map<String, dynamic> body = {
+      'laneId': laneId,
+      'credentialType': credentialType,
+      'credentialValue': credentialValue,
+      'vehicleType': vehicleType,
+      'overrideCapacity': overrideCapacity,
+      'syncSource': 'MOBILE',
+      if (vehicleNumber != null && vehicleNumber.trim().isNotEmpty)
+        'vehicleNumber': vehicleNumber.trim(),
+      if (zoneId != null) 'zoneId': zoneId,
+      if (operatorId != null) 'operatorId': operatorId,
+      if (shiftId != null) 'shiftId': shiftId,
+      if (entryImageUrl != null) 'entryImageUrl': entryImageUrl,
+      if (overrideReason != null) 'overrideReason': overrideReason,
+      if (remarks != null) 'remarks': remarks,
+    };
+    return await postRequest(baseUrl1, '$_parking/session/entry', body);
+  }
+
+  // --- Exit ------------------------------------------------------------------
+
+  /// Price the stay before taking payment. Does NOT release the vehicle.
+  static Future<http.Response> parkingExitLookup({
+    required int siteId,
+    required String credentialType,
+    required String credentialValue,
+  }) async {
+    final String endpoint = '$_parking/exit/lookup'
+        '?siteId=$siteId'
+        '&credentialType=${Uri.encodeQueryComponent(credentialType)}'
+        '&credentialValue=${Uri.encodeQueryComponent(credentialValue)}';
+    return await getRequest(baseUrl1, endpoint);
+  }
+
+  /// Settle and release. Returns the receipt (including change due for cash).
+  static Future<http.Response> parkingExitConfirm({
+    required int sessionId,
+    int? exitLaneId,
+    int? operatorId,
+    int? shiftId,
+    String? paymentMode,
+    double? tenderedAmount,
+    String? referenceNo,
+    bool waive = false,
+    String? waiveReason,
+    double? waiveAmount,
+    int? approvedBy,
+    String? exitImageUrl,
+    String? remarks,
+  }) async {
+    final Map<String, dynamic> body = {
+      'sessionId': sessionId,
+      'waive': waive,
+      'syncSource': 'MOBILE',
+      if (exitLaneId != null) 'exitLaneId': exitLaneId,
+      if (operatorId != null) 'operatorId': operatorId,
+      if (shiftId != null) 'shiftId': shiftId,
+      if (paymentMode != null) 'paymentMode': paymentMode,
+      if (tenderedAmount != null) 'tenderedAmount': tenderedAmount,
+      if (referenceNo != null) 'referenceNo': referenceNo,
+      if (waiveReason != null) 'waiveReason': waiveReason,
+      if (waiveAmount != null) 'waiveAmount': waiveAmount,
+      if (approvedBy != null) 'approvedBy': approvedBy,
+      if (exitImageUrl != null) 'exitImageUrl': exitImageUrl,
+      if (remarks != null) 'remarks': remarks,
+    };
+    return await postRequest(baseUrl1, '$_parking/exit/confirm', body);
+  }
+
+  // --- Shift (cash reconciliation) -------------------------------------------
+
+  /// The operator's currently-open shift, if any. Used to resume after the app
+  /// is killed mid-shift rather than opening a second one.
+  static Future<http.Response> getParkingOpenShift(int operatorUserId) async {
+    return await getRequest(
+        baseUrl1, '$_parking/shift/open/operator/$operatorUserId');
+  }
+
+  static Future<http.Response> parkingShiftOpen({
+    required int siteId,
+    required int operatorUserId,
+    int? laneId,
+    double? openingFloat,
+  }) async {
+    String endpoint = '$_parking/shift/open'
+        '?siteId=$siteId&operatorUserId=$operatorUserId';
+    if (laneId != null) endpoint += '&laneId=$laneId';
+    if (openingFloat != null) endpoint += '&openingFloat=$openingFloat';
+    return await postRequest(baseUrl1, endpoint, {});
+  }
+
+  static Future<http.Response> parkingShiftClose({
+    required int shiftId,
+    required double declaredCash,
+    String? varianceReason,
+  }) async {
+    String endpoint =
+        '$_parking/shift/$shiftId/close?declaredCash=$declaredCash';
+    if (varianceReason != null && varianceReason.isNotEmpty) {
+      endpoint += '&varianceReason=${Uri.encodeQueryComponent(varianceReason)}';
+    }
+    return await postRequest(baseUrl1, endpoint, {});
+  }
+
+  static Future<http.Response> getParkingShiftSummary(int shiftId) async {
+    return await getRequest(baseUrl1, '$_parking/shift/$shiftId');
+  }
+
+  // --- Register + dashboard ---------------------------------------------------
+
+  /// Vehicle movement register. `status` is INSIDE | EXITED | ALL; `from`/`to`
+  /// are ISO dates and only meaningful for the historical views.
+  static Future<http.Response> parkingMovementSearch({
+    required int siteId,
+    String status = 'INSIDE',
+    String? from,
+    String? to,
+    String? plate,
+    int? zoneId,
+    String? vehicleType,
+    int page = 0,
+    int pageSize = 50,
+  }) async {
+    final params = <String, String>{
+      'siteId': '$siteId',
+      'status': status,
+      'page': '$page',
+      'pageSize': '$pageSize',
+      if (from != null && from.isNotEmpty) 'from': from,
+      if (to != null && to.isNotEmpty) 'to': to,
+      if (plate != null && plate.trim().isNotEmpty) 'plate': plate.trim(),
+      if (zoneId != null) 'zoneId': '$zoneId',
+      if (vehicleType != null && vehicleType.isNotEmpty)
+        'vehicleType': vehicleType,
+    };
+    final query = params.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    return await getRequest(baseUrl1, '$_parking/movement/search?$query');
+  }
+
+  /// Takings cut by mode, vehicle type, lane and operator.
+  static Future<http.Response> getParkingCollectionReport({
+    required int siteId,
+    required String fromDate,
+    required String toDate,
+  }) async {
+    return await getRequest(
+        baseUrl1,
+        '$_parking/report/collection'
+        '?siteId=$siteId&fromDate=$fromDate&toDate=$toDate');
+  }
+
+  /// Traffic, dwell distribution and utilisation.
+  static Future<http.Response> getParkingOperationsReport({
+    required int siteId,
+    required String fromDate,
+    required String toDate,
+  }) async {
+    return await getRequest(
+        baseUrl1,
+        '$_parking/report/operations'
+        '?siteId=$siteId&fromDate=$fromDate&toDate=$toDate');
+  }
+
+  /// Excel export of a report.
+  ///
+  /// Returns the workbook bytes rather than JSON — the server builds the sheet
+  /// from the same figures it reported, so the file cannot drift from what was
+  /// on screen. `reportCode` is COLLECTION | OPERATIONS | SESSIONS.
+  static Future<http.Response> exportParkingReport({
+    required String reportCode,
+    required int siteId,
+    required String fromDate,
+    required String toDate,
+  }) async {
+    return await getRequest(
+        baseUrl1,
+        '$_parking/report/$reportCode/export'
+        '?siteId=$siteId&fromDate=$fromDate&toDate=$toDate');
+  }
+
+  /// The supervisor's wall screen — occupancy, today's money, dead devices,
+  /// pending decisions.
+  static Future<http.Response> getParkingLiveDashboard(int siteId) async {
+    return await getRequest(
+        baseUrl1, '$_parking/report/dashboard/live/$siteId');
   }
 }
