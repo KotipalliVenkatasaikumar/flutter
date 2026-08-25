@@ -39,6 +39,14 @@ class _ResetAndroidIdScreenState extends State<ResetAndroidIdScreen> {
   List<User> users = [];
   bool isLoading = true;
 
+  // Search box inside the user dropdown menu.
+  final TextEditingController _userSearchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _userSearchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -348,6 +356,70 @@ class _ResetAndroidIdScreenState extends State<ResetAndroidIdScreen> {
                             color: Colors.white,
                           ),
                         ),
+                        // Type-to-filter the user list.
+                        dropdownSearchData: DropdownSearchData<int>(
+                          searchController: _userSearchController,
+                          searchInnerWidgetHeight: 60,
+                          searchInnerWidget: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                            // Rebuilds only the field so the clear button can
+                            // follow the typed text inside the menu overlay.
+                            child: ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _userSearchController,
+                              builder: (context, value, _) => TextFormField(
+                                controller: _userSearchController,
+                                textInputAction: TextInputAction.search,
+                                style: const TextStyle(fontSize: 14),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 10),
+                                  hintText: 'Search user',
+                                  hintStyle: const TextStyle(
+                                      fontSize: 14,
+                                      color: AppColors.searchHint),
+                                  prefixIcon:
+                                      const Icon(Icons.search, size: 20),
+                                  suffixIcon: value.text.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          icon:
+                                              const Icon(Icons.clear, size: 18),
+                                          onPressed:
+                                              _userSearchController.clear,
+                                        ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: const BorderSide(
+                                        color:
+                                            Color.fromARGB(255, 41, 221, 200),
+                                        width: 1.0),
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: const BorderSide(
+                                        color: Color.fromARGB(255, 23, 158, 142),
+                                        width: 2.0),
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Items hold userId as the value, so match on the
+                          // displayed user name instead.
+                          searchMatchFn: (item, searchValue) {
+                            final name =
+                                (item.child as Text).data?.toLowerCase() ?? '';
+                            return name.contains(searchValue.toLowerCase().trim());
+                          },
+                        ),
+                        // Clear the filter when the menu closes.
+                        onMenuStateChange: (isOpen) {
+                          if (!isOpen) _userSearchController.clear();
+                        },
                       ),
                       const SizedBox(height: 30),
                       ElevatedButton(

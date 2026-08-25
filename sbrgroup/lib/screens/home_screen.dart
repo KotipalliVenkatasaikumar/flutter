@@ -17,6 +17,8 @@ import 'package:ajna/screens/facility_management/customer_consumption.dart';
 import 'package:ajna/screens/facility_management/fo_report.dart';
 import 'package:ajna/screens/facility_management/ot_project_wise_report.dart';
 import 'package:ajna/screens/facility_management/ot_screen.dart';
+import 'package:ajna/screens/facility_management/manual_attendance.dart';
+import 'package:ajna/screens/hrm/employee_list_screen.dart';
 import 'package:ajna/screens/facility_management/qr_generator.dart';
 import 'package:ajna/screens/facility_management/qr_schedule.dart';
 import 'package:ajna/screens/facility_management/qrregenerate.dart';
@@ -107,18 +109,34 @@ class IconButtonWidget extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Brand-tinted plate behind the module artwork.
+              // The plate behind the glyph.
+              //
+              // A flat tinted square reads as a placeholder; the gradient plus
+              // the hairline ring gives it an edge to catch the light, which is
+              // what separates a tile that looks designed from one that looks
+              // unfinished. Both are derived from the tile's accent, so the
+              // grid stays one family rather than twenty-five colours.
               Container(
-                width: 54,
-                height: 54,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  color: AppColors.tint(accentColor, 0.12),
-                  borderRadius: BorderRadius.circular(16),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.tint(accentColor, 0.18),
+                      AppColors.tint(accentColor, 0.07),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: accentColor.withOpacity(0.16),
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: imagePath != null
                     ? Image.asset(imagePath!, width: 32, height: 32)
-                    : Icon(icon, size: 26, color: accentColor),
+                    : Icon(icon, size: 27, color: accentColor),
               ),
               const SizedBox(height: 10),
               Flexible(
@@ -174,6 +192,8 @@ class _HomeScreenState extends State<HomeScreen> {
     'Facial Attendance',
     'Parking',
     'Site Incident',
+    'Manual Attendance',
+    'Employee',
   };
 
   /// Labels shown even when the role/menu API has not been updated yet.
@@ -188,8 +208,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Map<String, dynamic>> predefinedIcons = [
     {
       //'icon': Icons.qr_code,
-      'icon': null,
-      'imagePath': 'lib/assets/images/qrgenerate.png',
+      'icon': Icons.qr_code_2_rounded,
+      'imagePath': null,
       'label': 'QR Generator',
       'onTap': () => const QrGeneratorScreen(),
     },
@@ -209,64 +229,64 @@ class _HomeScreenState extends State<HomeScreen> {
     // },
     {
       //'icon': Icons.app_registration,
-      'icon': null,
-      'imagePath': 'lib/assets/images/user_registration.png',
+      'icon': Icons.person_add_alt_1_rounded,
+      'imagePath': null,
       'label': 'User Registration',
       'onTap': () => UserFormScreen(),
     },
     {
       //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/scan_report.png',
+      'icon': Icons.summarize_rounded,
+      'imagePath': null,
       'label': 'Scan Report',
       'onTap': () => ReportsHomeScreen(),
     },
     {
       //'icon': Icons.dataset_linked,
-      'icon': null,
-      'imagePath': 'lib/assets/images/qr_regenarate.png',
+      'icon': Icons.autorenew_rounded,
+      'imagePath': null,
       'label': 'Re Generate Qr',
       'onTap': () => const QrRegenerate(),
     },
     {
       //'icon': Icons.assessment,
-      'icon': null,
-      'imagePath': 'lib/assets/images/qr_assign.png',
+      'icon': Icons.assignment_ind_rounded,
+      'imagePath': null,
       'label': 'QR Assign',
       'onTap': () => const UserManageScreen(),
     },
     {
       //'icon': Icons.qr_code_scanner,
-      'icon': null,
-      'imagePath': 'lib/assets/images/qrscan.png',
+      'icon': Icons.qr_code_scanner_rounded,
+      'imagePath': null,
       'label': 'QR Scan',
       'onTap': () => ScanScheduleScreen(),
     },
     {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/consumption.png',
+      'icon': Icons.speed_rounded,
+      'imagePath': null,
       'label': 'Consumption',
       'onTap': () => CustomerConsumptionScreen(),
     },
     {
       //'icon': Icons.reset_tv,
-      'icon': null,
-      'imagePath': 'lib/assets/images/reset_andriod_id.png',
+      'icon': Icons.phonelink_erase_rounded,
+      'imagePath': null,
       'label': 'Reset Android Id',
       'onTap': () => ResetAndroidIdScreen(),
     },
     {
       //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/crm-icon.png',
+      'icon': Icons.handshake_rounded,
+      'imagePath': null,
       'label': 'CRM',
       'onTap': () => const CrmHomeScreen(),
     },
     {
       //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/issue.png',
+      'icon': Icons.report_problem_rounded,
+      'imagePath': null,
       'label': 'Raise Issue',
       'onTap': () => RaiseIssue(),
     },
@@ -279,8 +299,8 @@ class _HomeScreenState extends State<HomeScreen> {
     // },
     {
       //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/attendace.png',
+      'icon': Icons.directions_walk_rounded,
+      'imagePath': null,
       'label': 'FO Visit',
       'onTap': () => const AttendanceScreen(),
     },
@@ -293,44 +313,56 @@ class _HomeScreenState extends State<HomeScreen> {
     // },
     {
       //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/calendar.png',
+      'icon': Icons.event_note_rounded,
+      'imagePath': null,
       'label': 'Attendance Report',
       'onTap': () => AttendanceReportScreen(),
     },
     {
+      'icon': Icons.fact_check_rounded,
+      'imagePath': null,
+      'label': 'Manual Attendance',
+      'onTap': () => const ManualAttendanceScreen(),
+    },
+    {
+      'icon': Icons.badge_rounded,
+      'imagePath': null,
+      'label': 'Employee',
+      'onTap': () => const EmployeeListScreen(),
+    },
+    {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/consumption.png',
+      'icon': Icons.calendar_month_rounded,
+      'imagePath': null,
       'label': 'Schedule Report',
       'onTap': () => ReportsHomeScreen(),
     },
     {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/account.png',
+      'icon': Icons.inventory_2_rounded,
+      'imagePath': null,
       'label': 'Stored Data',
       'onTap': () => SchedulesScreen(),
     },
     {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/ot.png',
+      'icon': Icons.more_time_rounded,
+      'imagePath': null,
       'label': 'OT',
       'onTap': () => OtScreen(),
     },
     {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/otreport.png',
+      'icon': Icons.pending_actions_rounded,
+      'imagePath': null,
       'label': 'OT Report',
       'onTap': () => OtReportProjectWise(),
       // 'onTap': () => OtReportScreen(),
     },
     {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/student.png',
+      'icon': Icons.calculate_rounded,
+      'imagePath': null,
       'label': 'Math Quiz',
       'onTap': () => MathTablesTestScreen(),
       // 'onTap': () => OtReportScreen(),
@@ -338,8 +370,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/fo_report.png',
+      'icon': Icons.assignment_turned_in_rounded,
+      'imagePath': null,
       'label': 'Fo Report',
       'onTap': () => FoReportsScreen(),
       // 'onTap': () => OtReportScreen(),
@@ -347,38 +379,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
     {
       //'icon': Icons.construction,
-      'icon': null,
-      'imagePath': 'lib/assets/images/notification.png',
+      'icon': Icons.notifications_active_rounded,
+      'imagePath': null,
       'label': 'Notification',
       'onTap': () => NotificationSendingScreen(),
       // 'onTap': () => OtReportScreen(),
     },
     {
       //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/registration.png',
+      'icon': Icons.face_retouching_natural_rounded,
+      'imagePath': null,
       'label': 'Face Registration',
       'onTap': () => AdminFaceRegisterScreen(),
     },
 
     {
       //'icon': Icons.bar_chart,
-      'icon': null,
-      'imagePath': 'lib/assets/images/recognition.png',
+      'icon': Icons.how_to_reg_rounded,
+      'imagePath': null,
       'label': 'Facial Attendance',
       'onTap': () => AttendanceDashboardScreen(),
     },
     {
       // No artwork for parking yet — the tile falls back to a Material icon,
       // which IconButtonWidget already supports via `icon`.
-      'icon': Icons.local_parking,
+      'icon': Icons.local_parking_rounded,
       'imagePath': null,
       'label': 'Parking',
       'onTap': () => const ParkingHomeScreen(),
     },
     {
-      'icon': null,
-      'imagePath': 'lib/assets/images/incident.png',
+      'icon': Icons.crisis_alert_rounded,
+      'imagePath': null,
       'label': 'Site Incident',
       'onTap': () => const SiteIncidentScreen(),
     },
