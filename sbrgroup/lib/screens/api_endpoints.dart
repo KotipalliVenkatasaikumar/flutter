@@ -1710,4 +1710,41 @@ class ApiService {
     return await getRequest(
         baseUrl1, '$_parking/report/dashboard/live/$siteId');
   }
+
+  /// Creates or updates a site incident.
+  ///
+  /// The same endpoint serves both: `siteIncidentId` 0 creates, any other value
+  /// updates. The caller builds the whole body because the field set is fixed
+  /// by the backend contract and a partial map is rejected rather than merged.
+  static Future<http.Response> saveSiteIncident(
+      Map<String, dynamic> incident) async {
+    return await postRequest(
+        baseUrl2, 'api/facility-management/siteIncident/save', incident);
+  }
+
+  /// Site incidents, paged and filtered.
+  ///
+  /// Every filter is optional: the backend reads `0` as "any" for the id
+  /// filters and an empty string as "any" for [status] and the dates, so the
+  /// defaults are passed through rather than omitted from the query string.
+  static Future<http.Response> getAllSiteIncidents({
+    required int organizationId,
+    int page = 0,
+    int size = 15,
+    int locationId = 0,
+    int incidentTypeId = 0,
+    int severityId = 0,
+    int responsibleEmployeeId = 0,
+    String status = '',
+    String startDate = '',
+    String endDate = '',
+  }) async {
+    return await getRequest(
+        baseUrl2,
+        'api/facility-management/siteIncident/getAllSiteIncidents'
+        '?page=$page&size=$size&organizationId=$organizationId'
+        '&locationId=$locationId&incidentTypeId=$incidentTypeId'
+        '&severityId=$severityId&responsibleEmployeeId=$responsibleEmployeeId'
+        '&status=$status&startDate=$startDate&endDate=$endDate');
+  }
 }
