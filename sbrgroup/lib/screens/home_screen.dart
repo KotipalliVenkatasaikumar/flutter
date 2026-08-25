@@ -24,6 +24,7 @@ import 'package:ajna/screens/facility_management/reports_projects.dart';
 import 'package:ajna/screens/facility_management/reset_android_id.dart';
 import 'package:ajna/screens/facility_management/user_manage_screen.dart';
 import 'package:ajna/screens/facility_management/user_registration.dart';
+import 'package:ajna/screens/incident/site_incident.dart';
 import 'package:ajna/screens/notification/notification_sending.dart';
 import 'package:ajna/screens/parking/parking_home_screen.dart';
 import 'package:ajna/screens/sqflite/displaystored_data.dart';
@@ -172,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'Add Absent List',
     'Facial Attendance',
     'Parking',
+    'Site Incident',
   };
 
   /// Labels shown even when the role/menu API has not been updated yet.
@@ -373,6 +375,12 @@ class _HomeScreenState extends State<HomeScreen> {
       'imagePath': null,
       'label': 'Parking',
       'onTap': () => const ParkingHomeScreen(),
+    },
+    {
+      'icon': null,
+      'imagePath': 'lib/assets/images/incident.png',
+      'label': 'Site Incident',
+      'onTap': () => const SiteIncidentScreen(),
     },
     // {
     //   //'icon': Icons.bar_chart,
