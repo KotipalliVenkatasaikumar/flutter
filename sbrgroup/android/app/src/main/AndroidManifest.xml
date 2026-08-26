@@ -84,5 +84,17 @@
             <action android:name="android.intent.action.GET_CONTENT"/>
             <data android:mimeType="*/*"/>
         </intent>
+        <!-- Update prompt (UpdateChecker._openStore). Android 11+ package
+             visibility hides these handlers unless they are declared, so
+             canLaunchUrl() returns false and the market:// deep link is never
+             used. Both entries are visibility-only: they grant no permission. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="market"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

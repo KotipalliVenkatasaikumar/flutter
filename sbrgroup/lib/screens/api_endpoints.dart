@@ -25,11 +25,11 @@ class ApiService {
   // static const String baseUrl4 = 'http://15.207.212.144/';
   // static const String notificationUrl = 'http://15.207.212.144';
 
-  // static const String baseUrl1 = 'http://65.2.49.230:1093/';
-  // static const String baseUrl2 = 'http://65.2.49.230:1093/';
-  // static const String baseUrl3 = 'http://65.2.49.230:1093/';
-  // static const String baseUrl4 = 'http://65.2.49.230:1093/';
-  // static const String notificationUrl = 'http://65.2.49.230:1093';
+  // static const String baseUrl1 = 'http://192.168.0.33:1093/';
+  // static const String baseUrl2 = 'http://192.168.0.33:1093/';
+  // static const String baseUrl3 = 'http://192.168.0.33:1093/';
+  // static const String baseUrl4 = 'http://192.168.0.33:1093/';
+  // static const String notificationUrl = 'http://192.168.0.33:1093';
 
   static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
   static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
@@ -245,6 +245,37 @@ class ApiService {
     }
 
     _handleResponse(response); // Optional: Handle response status
+    return response;
+  }
+
+  /// DELETE with the same auth and 401-retry behaviour as the other verbs.
+  ///
+  /// The delete endpoints in use take their arguments in the path and query
+  /// string, so this sends no body — `http.delete` with a body is refused by
+  /// some proxies and none of the callers need one.
+  static Future<http.Response> deleteRequest(
+      String baseUrl, String endpoint) async {
+    await initialize();
+
+    final Uri uri = Uri.parse('$baseUrl$endpoint');
+    final Map<String, String> headers = {
+      if (!isExcludedEndpoint(endpoint) && accessToken != null)
+        'Authorization': 'Bearer $accessToken',
+      if (userId != null) 'proxyId': userId.toString(),
+      if (userId != null) 'userId': userId.toString(),
+    };
+
+    http.Response response = await http.delete(uri, headers: headers);
+
+    if (response.statusCode == 401) {
+      final refreshSuccess = await _refreshToken();
+      if (refreshSuccess) {
+        headers['Authorization'] = 'Bearer $accessToken';
+        response = await http.delete(uri, headers: headers);
+      }
+    }
+
+    _handleResponse(response);
     return response;
   }
 
@@ -1746,5 +1777,283 @@ class ApiService {
         '&locationId=$locationId&incidentTypeId=$incidentTypeId'
         '&severityId=$severityId&responsibleEmployeeId=$responsibleEmployeeId'
         '&status=$status&startDate=$startDate&endDate=$endDate');
+  }
+
+  // ===========================================================================
+  // MANUAL ATTENDANCE
+  // ---------------------------------------------------------------------------
+  // Front-end for facility-management-service `/manualattendance/*` — the same
+  // sheet the web shows at `attendance/manualAttendance`.
+  //
+  // Face recognition decides who was present and nobody reviews it. The sheet
+  // puts every punch made at one site on one day in front of the supervisor who
+  // was there: tick the genuine ones, remove the ones that should never have
+  // been recorded, move the ones worked at another site.
+  //
+  // The backend decides the state of every row (checked / selectable / movable /
+  // restorable / undoMovable and the status label), so the screen renders what
+  // it is handed rather than working any of it out.
+  // ===========================================================================
+  static const String _manualAttendance =
+      'api/facility-management/manualattendance';
+
+  /// The sheet itself, paged.
+  ///
+  /// Every filter is optional to the backend: `0` means "any" for the id
+  /// filters and an empty string means "any" for the date and the two text
+  /// searches, so the defaults are passed through rather than omitted.
+  static Future<http.Response> getManualAttendances({
+    int page = 0,
+    int size = 15,
+    int locationId = 0,
+    String attendanceDate = '',
+    int shiftId = 0,
+    int statusId = 0,
+    String userName = '',
+    String employeeNumber = '',
+  }) async {
+    return await getRequest(
+        baseUrl1,
+        '$_manualAttendance/getAllManualAttendances'
+        '?page=$page&size=$size&locationId=$locationId'
+        '&attendanceDate=$attendanceDate&shiftId=$shiftId&statusId=$statusId'
+        '&userName=${Uri.encodeQueryComponent(userName)}'
+        '&employeeNumber=${Uri.encodeQueryComponent(employeeNumber)}');
+  }
+
+  /// Header counts for the chosen site and day — logged in, pending, verified,
+  /// removed and moved out. Not affected by the status filter, which is why it
+  /// is a separate call rather than a field on the page.
+  static Future<http.Response> getManualAttendanceCount({
+    int locationId = 0,
+    String attendanceDate = '',
+    int shiftId = 0,
+  }) async {
+    return await getRequest(
+        baseUrl1,
+        '$_manualAttendance/count?locationId=$locationId'
+        '&attendanceDate=$attendanceDate&shiftId=$shiftId');
+  }
+
+  /// The options of the status filter.
+  ///
+  /// Read from common reference data, so which states exist and what they are
+  /// called is configured rather than written into the app — the screen opens
+  /// on the first one the backend returns.
+  static Future<http.Response> getManualAttendanceStatuses() async {
+    return await getRequest(baseUrl1, '$_manualAttendance/statuses');
+  }
+
+  /// Ticks the punches the supervisor accepted.
+  static Future<http.Response> verifyManualAttendance({
+    required List<int> attendanceIds,
+    required int verifiedBy,
+    String remarks = '',
+  }) async {
+    return await postRequest(baseUrl1, '$_manualAttendance/verify', {
+      'attendanceIds': attendanceIds,
+      'verifiedBy': verifiedBy,
+      'remarks': remarks,
+    });
+  }
+
+  /// Takes back ticks that were saved earlier.
+  static Future<http.Response> unVerifyManualAttendance({
+    required List<int> attendanceIds,
+    required int verifiedBy,
+    String remarks = '',
+  }) async {
+    return await postRequest(baseUrl1, '$_manualAttendance/unverify', {
+      'attendanceIds': attendanceIds,
+      'verifiedBy': verifiedBy,
+      'remarks': remarks,
+    });
+  }
+
+  /// Removes a punch that should never have been recorded.
+  ///
+  /// The attendance row is kept and flagged, never deleted — which is why this
+  /// can be undone with [restoreManualAttendance].
+  static Future<http.Response> removeManualAttendance({
+    required int attendanceId,
+    required int removedBy,
+    String remarks = '',
+  }) async {
+    return await deleteRequest(
+        baseUrl1,
+        '$_manualAttendance/remove/$attendanceId?removedBy=$removedBy'
+        '&remarks=${Uri.encodeQueryComponent(remarks)}');
+  }
+
+  /// Sends a punch to the site it was actually worked at — marked in at one
+  /// gate, on duty at another. The punch is genuine, so it moves rather than
+  /// being removed, and the other site's supervisor verifies it there.
+  static Future<http.Response> moveManualAttendance({
+    required int attendanceId,
+    required int movedLocationId,
+    required int movedBy,
+    String remarks = '',
+  }) async {
+    return await putRequest(
+        baseUrl1,
+        '$_manualAttendance/move/$attendanceId'
+        '?movedLocationId=$movedLocationId&movedBy=$movedBy'
+        '&remarks=${Uri.encodeQueryComponent(remarks)}',
+        {});
+  }
+
+  /// Brings a moved punch back to the site it was marked at.
+  ///
+  /// Raised against the MOVED row (`movedManualAttendanceId`), not the
+  /// verification row — they are different records.
+  static Future<http.Response> undoMoveManualAttendance({
+    required int manualAttendanceId,
+    required int movedBy,
+  }) async {
+    return await putRequest(baseUrl1,
+        '$_manualAttendance/undo-move/$manualAttendanceId?movedBy=$movedBy', {});
+  }
+
+  /// Puts back a punch that was removed by mistake.
+  static Future<http.Response> restoreManualAttendance({
+    required int manualAttendanceId,
+    required int restoredBy,
+  }) async {
+    return await putRequest(baseUrl1,
+        '$_manualAttendance/restore/$manualAttendanceId?restoredBy=$restoredBy',
+        {});
+  }
+
+  // ===========================================================================
+  // EMPLOYEE (HRM)
+  // ---------------------------------------------------------------------------
+  // Front-end for hrm-service `/employee/*` — the same records the web keeps at
+  // `employee/displayemployee` and `employee/addemployee`.
+  //
+  // An employee is NOT a user. `api/user/user/signUp` (see [signUp]) creates a
+  // login; this creates the HR record — employment, position, pay, family,
+  // documents. The employee row carries a userId when a login was asked for.
+  //
+  // Both writes are multipart, not JSON: the whole EmployeeSaveDto travels as a
+  // JSON string in the `employeeSaveDto` part, with the identity documents
+  // alongside it as `employeeDocuments` files.
+  // ===========================================================================
+  static const String _employee = 'api/hrm/employee';
+
+  /// The employee list, paged and filtered.
+  ///
+  /// Every filter is optional and the backend reads an empty string as "any",
+  /// so the defaults are passed through rather than omitted from the query —
+  /// the same contract the web's `getall` call uses.
+  static Future<http.Response> getEmployees({
+    required int organizationId,
+    int page = 0,
+    int size = 15,
+    String projectAssigned = '',
+    String employeeRoleId = '',
+    String reportingManager = '',
+    String employeeId = '',
+    String status = 'A',
+    String firstName = '',
+    String shiftId = '',
+    String designation = '',
+  }) async {
+    return await getRequest(
+        baseUrl1,
+        '$_employee/getall?organizationId=$organizationId'
+        '&page=$page&size=$size'
+        '&projectAssigned=$projectAssigned&employeeRoleId=$employeeRoleId'
+        '&reportingManager=$reportingManager'
+        '&employeeId=${Uri.encodeQueryComponent(employeeId)}'
+        '&status=$status'
+        '&firstName=${Uri.encodeQueryComponent(firstName)}'
+        '&shiftId=$shiftId'
+        '&designation=${Uri.encodeQueryComponent(designation)}');
+  }
+
+  /// The whole record — employee, addresses, education, bank, family and
+  /// experience — as one EmployeeSaveDto. This is what the edit form loads.
+  ///
+  /// Note the parameter is `employeeId` but takes the row's `id`, not the
+  /// employee number. The backend names it that way; the web passes `employee.id`.
+  static Future<http.Response> getEmployeeById(int id) async {
+    return await getRequest(
+        baseUrl1, '$_employee/getbyemployeeid?employeeId=$id');
+  }
+
+  /// Creates an employee.
+  ///
+  /// [employeeSaveDtoJson] is the encoded EmployeeSaveDto and [documents] the
+  /// identity files. Documents are optional to the backend even though the web
+  /// form marks Aadhaar required — that rule lives in the browser only.
+  static Future<http.Response> submitEmployee(
+    String employeeSaveDtoJson,
+    List<File> documents,
+  ) async {
+    return await _sendEmployee(
+        'POST', '$_employee/submitEmployee', employeeSaveDtoJson, documents);
+  }
+
+  /// Updates an employee.
+  ///
+  /// The DTO REPLACES what is stored, so it has to carry every section — send
+  /// it with an empty address or family list and that employee's addresses or
+  /// family are gone. Always build this from a record loaded by
+  /// [getEmployeeById], never from a blank form.
+  static Future<http.Response> updateEmployee(
+    String employeeSaveDtoJson,
+    List<File> documents,
+  ) async {
+    return await _sendEmployee(
+        'PUT', '$_employee/update', employeeSaveDtoJson, documents);
+  }
+
+  /// The multipart body both employee writes share.
+  ///
+  /// The DTO goes in as a string field rather than as JSON: the endpoint takes
+  /// it as `@RequestPart("employeeSaveDto") String` and parses it itself.
+  static Future<http.Response> _sendEmployee(
+    String method,
+    String endpoint,
+    String employeeSaveDtoJson,
+    List<File> documents,
+  ) async {
+    await initialize();
+
+    final request =
+        http.MultipartRequest(method, Uri.parse('$baseUrl1$endpoint'));
+    request.fields['employeeSaveDto'] = employeeSaveDtoJson;
+
+    for (final file in documents) {
+      if (!await file.exists()) continue;
+      request.files.add(
+        await http.MultipartFile.fromPath('employeeDocuments', file.path),
+      );
+    }
+
+    if (accessToken != null) {
+      request.headers['Authorization'] = 'Bearer $accessToken';
+    }
+    if (userId != null) {
+      request.headers['proxyId'] = userId.toString();
+      request.headers['userId'] = userId.toString();
+    }
+
+    final streamed = await request.send();
+    return await http.Response.fromStream(streamed);
+  }
+
+  static Future<http.Response> deleteEmployee(int id) async {
+    return await deleteRequest(baseUrl1, '$_employee/$id');
+  }
+
+  /// One reference row looked up by its key rather than by its type.
+  ///
+  /// Used for the form-status ids the save carries ('ews' when an employee is
+  /// first submitted, 'esd' when a submitted one is sent on) — the web resolves
+  /// these the same way rather than hard-coding the numbers.
+  static Future<http.Response> getCommonReferenceByKey(String refKey) async {
+    return await getRequest(
+        baseUrl1, 'api/user/commonreferencedetails/mob?refKey=$refKey');
   }
 }

@@ -20,23 +20,25 @@ import 'package:url_launcher/url_launcher.dart';
 /// endpoint and field the old APK flow read.
 class UpdateChecker {
   // ===========================================================================
-  // ⚠️ PLACEHOLDER STORE LINKS — REPLACE BEFORE RELEASE
+  // STORE LINKS
   // ---------------------------------------------------------------------------
-  // These are dummy values so the flow can be built and tested now. Swap all
-  // three once the listings exist:
+  // Android: LIVE. The listing is published at
+  //   https://play.google.com/store/apps/details?id=com.corenuts.ajna
+  // and both Play constants below match the `applicationId` (`com.corenuts.ajna`)
+  // set in android/app/build.gradle. Keep all three in sync if it ever changes.
   //
-  //   1. appStoreLink    — copy the real URL from App Store Connect. The
-  //                        `id...` number is Apple's, assigned when you create
-  //                        the app record. `id0000000000` below is NOT real.
-  //   2. playStoreLink   — must match the Android `applicationId` exactly.
-  //   3. playStoreWebLink— same package name as (2).
+  // ⚠️ iOS: STILL A PLACEHOLDER. `id0000000000` is not a real App Store ID —
+  // Apple issues it when the app record is created in App Store Connect. Replace
+  // `appStoreLink` before any iOS release, or the update prompt will send iPhone
+  // users to a dead page.
   //
-  // The Android `applicationId` is `com.corenuts.ajna` and the two Play links
-  // below already match it. Only the App Store ID is still a placeholder — it
-  // is issued when the app record is created in App Store Connect.
+  // Note: the `market://` deep link only resolves when the manifest declares a
+  // matching <queries> intent — see android/app/src/main/AndroidManifest.xml.
+  // Without it, Android 11+ package visibility makes canLaunchUrl() return false
+  // and _openStore() silently falls back to the web URL.
   // ===========================================================================
 
-  /// App Store link — dummy ID, replace with the real one.
+  /// App Store link — ⚠️ dummy ID, replace before the iOS release.
   static const String appStoreLink =
       "https://apps.apple.com/us/app/ajna/id0000000000";
 

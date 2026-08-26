@@ -37,9 +37,18 @@ android {
     // Pinned rather than inherited: this Flutter SDK still defaults to 34, and
     // Play refuses a new app below 35.
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // Pinned, not inherited. Several plugins declare a minimum NDK of
+    // 27.0.12077973 and Flutter's bundled default is lower, which prints a
+    // warning on every build. WorkHub pins the same version.
+    //
+    // Gradle downloads the NDK on first use if it is not installed.
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
+        // qr_code_scanner declares that it needs this, and AGP 8.7 enforces the
+        // declaration where 8.1 silently ignored it. It back-ports java.time and
+        // friends for the older API levels this app still supports.
+        coreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -61,14 +70,53 @@ android {
 
     defaultConfig {
         applicationId = "com.corenuts.ajna"
-        minSdk = 21
+        // 16 KB PAGE SIZE — this is why 23 and not 21.
+        //
+        // Play requires native libraries to ship UNCOMPRESSED and zip-aligned
+        // to 16 KB. AGP only does that when minSdk >= 23; below that it falls
+        // back to legacy packaging (extractNativeLibs=true, libs compressed),
+        // which the 16 KB check rejects no matter how the .so files themselves
+        // are aligned. There is no way to have both minSdk 21 and 16 KB.
+        //
+        // Cost is Android 5.0/5.1 (API 21-22), a 2014 release. WorkHub has
+        // shipped minSdk 23 for years.
+        minSdk = 23
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
     }
 
+    // Belt and braces: with minSdk 23 AGP already picks this, but stating it
+    // means a future minSdk change cannot silently reintroduce the 16 KB
+    // failure.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
     buildTypes {
         release {
+            // 16 KB PAGE SIZE / SIZE
+            //
+            // Ship only the two ARM ABIs. Nothing else fits both of these:
+            //
+            //  - TF Lite still has no 16 KB aligned x86_64 build, and Play
+            //    refuses a bundle carrying a misaligned 64-bit library. arm64
+            //    is aligned as of tensorflow-lite 2.17.0; x86_64 is not.
+            //  - x86/x86_64 serve emulators and Chromebooks only. Every phone
+            //    and tablet this app is deployed on is ARM, and the two x86
+            //    slices were ~19 MB of the bundle.
+            //
+            // DEBUG BUILDS ARE UNAFFECTED, so `flutter run` on an x86 emulator
+            // still works - this applies to the release build only.
+            //
+            // Revisit if Chrome OS is ever a target, or once TF Lite ships an
+            // aligned x86_64.
+            ndk {
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
+
             signingConfig = keystorePropertiesFile.exists()
                     ? signingConfigs.release
                     : signingConfigs.debug
@@ -81,12 +129,33 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
     implementation "androidx.work:work-runtime-ktx:2.8.1" // Ensure this is the same version
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version" // Ensure this is correct
     implementation "androidx.work:work-runtime-ktx:2.7.1" // Adjust version as needed
     implementation platform('com.google.firebase:firebase-bom:32.2.0') // Latest version
     implementation 'com.google.firebase:firebase-messaging'
-    implementation 'org.tensorflow:tensorflow-lite:2.13.0'
+    // 16 KB PAGE SIZE
+    //
+    // Play refuses a bundle whose native libraries are not 16 KB aligned, and
+    // 2.13.0 ships a libtensorflowlite_jni.so aligned to 4 KB. Alignment is
+    // baked into the prebuilt .so at compile time, so no Gradle or AGP setting
+    // can fix it - the only fix is a build of the library that was compiled
+    // aligned. 2.17.0 is the first that was.
+    //
+    // This is the AAR only. The Dart side still uses tflite_flutter 0.9.5,
+    // whose own libtensorflowlite_c.so is already 16 KB aligned, so none of the
+    // face-recognition code has to change.
+    implementation 'org.tensorflow:tensorflow-lite:2.17.0'
+
+    // Same problem, same cause: camera_android_camerax resolves
+    // androidx.camera 1.3.4, whose libimage_processing_util_jni.so is 4 KB
+    // aligned. Forced to 1.4.2 rather than upgrading the Flutter camera plugin,
+    // which would be an API change across every camera screen for no benefit.
+    implementation 'androidx.camera:camera-core:1.4.2'
+    implementation 'androidx.camera:camera-camera2:1.4.2'
+    implementation 'androidx.camera:camera-lifecycle:1.4.2'
+    implementation 'androidx.camera:camera-video:1.4.2'
 
 
 }
