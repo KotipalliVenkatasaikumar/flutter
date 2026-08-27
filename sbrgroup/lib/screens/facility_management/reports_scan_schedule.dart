@@ -532,7 +532,9 @@ class _ScheduleReportScreenState extends State<ScheduleReportScreen> {
         ],
       ),
       bottomNavigationBar: Container(
-        padding: EdgeInsets.zero,
+        // Bottom padding clears the system navigation bar (SDK 36 is always
+        // edge-to-edge), so the Home button is not hidden underneath it.
+        padding: EdgeInsets.only(bottom: bottomBarInset(context)),
         color: AppColors.primary,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

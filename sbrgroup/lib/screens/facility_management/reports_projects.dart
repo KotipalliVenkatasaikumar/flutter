@@ -12,6 +12,7 @@ import 'package:ajna/screens/util.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 
 import 'custom_date_picker.dart'; // Import the new LocationsScreen
 
@@ -412,7 +413,9 @@ class _ReportsHomeScreenState extends State<ReportsHomeScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        padding: EdgeInsets.zero,
+        // Bottom padding clears the system navigation bar (SDK 36 is always
+        // edge-to-edge), so the Home button is not hidden underneath it.
+        padding: EdgeInsets.only(bottom: bottomBarInset(context)),
         color: AppColors.primary,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

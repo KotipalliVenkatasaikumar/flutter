@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'map_screen.dart';
 import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 
 class OtScreen extends StatefulWidget {
   const OtScreen({super.key});
@@ -322,7 +323,9 @@ class _OtScreenState extends State<OtScreen> {
           color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.divider)),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+        // Bottom padding clears the system navigation bar (SDK 36 is always
+        // edge-to-edge), so the footer is not hidden underneath it.
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 12 + bottomBarInset(context)),
         child: RichText(
           text: TextSpan(
             children: [

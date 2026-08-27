@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ajna/screens/attendace/attendace_scan.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -188,8 +189,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.divider)),
         ),
-        padding: EdgeInsets.symmetric(
-            vertical: screenHeight * 0.02, horizontal: screenWidth * 0.05),
+        // Bottom padding clears the system navigation bar (SDK 36 is always
+        // edge-to-edge), so the footer is not hidden underneath it.
+        padding: EdgeInsets.fromLTRB(
+          screenWidth * 0.05,
+          screenHeight * 0.02,
+          screenWidth * 0.05,
+          screenHeight * 0.02 + bottomBarInset(context),
+        ),
         child: RichText(
           text: TextSpan(
             children: [
