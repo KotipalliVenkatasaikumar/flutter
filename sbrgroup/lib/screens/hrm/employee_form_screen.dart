@@ -412,7 +412,9 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
 
   Widget _footer() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+      // Bottom padding clears the system navigation bar (SDK 36 is always
+      // edge-to-edge), so the action buttons are not hidden underneath it.
+      padding: EdgeInsets.fromLTRB(12, 10, 12, 14 + bottomBarInset(context)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.divider)),

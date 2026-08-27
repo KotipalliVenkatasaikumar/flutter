@@ -37,6 +37,23 @@ const double kMaxContentWidth = 560;
 bool isTablet(BuildContext context) =>
     MediaQuery.of(context).size.shortestSide >= 600;
 
+/// Height of the device's system navigation bar — the gesture pill or the
+/// 3-button row — in logical pixels. Zero on devices that have neither.
+///
+/// The app targets SDK 36, where Android draws every app edge to edge with no
+/// opt-out, so anything pinned to the bottom of the screen (a footer, a
+/// SAVE/RESET bar, a "Home" bar) renders *underneath* the system navigation
+/// bar unless it reserves this much room. Add it to the bar's own bottom
+/// padding rather than wrapping the bar in a `SafeArea`, so the bar's
+/// background still paints behind the navigation bar instead of leaving a
+/// stripe of page background there.
+///
+/// Uses `padding`, not `viewPadding`: when the keyboard is open the navigation
+/// bar sits on top of it and the gap is no longer needed, and `padding`
+/// collapses to zero in that case.
+double bottomBarInset(BuildContext context) =>
+    MediaQuery.of(context).padding.bottom;
+
 /// Centres [child] and caps it at [maxWidth] so it does not run edge-to-edge
 /// on a tablet. On a phone it is a no-op (the phone is already narrower).
 class ContentWidthLimit extends StatelessWidget {

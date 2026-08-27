@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:ajna/main.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:ajna/screens/app_bar.dart';
-import 'package:ajna/screens/attendace/absent_list_screen.dart';
 import 'package:ajna/screens/attendace/attendace_report.dart';
 import 'package:ajna/screens/attendace/fo_attendance.dart';
 import 'package:ajna/screens/attendance/attendance_dashboard.dart';
@@ -11,8 +10,6 @@ import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/crm/crm_home_screen.dart';
 import 'package:ajna/screens/crm/raise-issue.dart';
 import 'package:ajna/screens/face_detection/admin_face_registration.dart';
-import 'package:ajna/screens/face_detection/face_detection.dart';
-import 'package:ajna/screens/face_detection/logout_face_detection.dart';
 import 'package:ajna/screens/facility_management/customer_consumption.dart';
 import 'package:ajna/screens/facility_management/fo_report.dart';
 import 'package:ajna/screens/facility_management/ot_project_wise_report.dart';
@@ -195,15 +192,6 @@ class _HomeScreenState extends State<HomeScreen> {
     'Manual Attendance',
     'Employee',
   };
-
-  /// Labels shown even when the role/menu API has not been updated yet.
-  ///
-  /// The grid normally renders only what `fetchAdditionalData` returns for the
-  /// user's role. Parking is new, so until "Parking" is added to the role menu
-  /// on the backend the tile would never appear and the module would be
-  /// unreachable. **Remove this once the backend returns it** — otherwise the
-  /// tile is visible to every role, bypassing the menu permissions.
-  static const Set<String> _alwaysVisibleLabels = {'Parking'};
 
   final List<Map<String, dynamic>> predefinedIcons = [
     {
@@ -474,16 +462,6 @@ class _HomeScreenState extends State<HomeScreen> {
         if (iconLabels.contains(predefinedIcon['label'])) {
           matchedIcons.add(predefinedIcon);
         }
-      }
-    }
-
-    // Add any always-visible tile the role menu did not return, so a new module
-    // is reachable before the backend menu is updated. See the field's doc.
-    for (final predefinedIcon in predefinedIcons) {
-      final String label = predefinedIcon['label'] as String;
-      if (_alwaysVisibleLabels.contains(label) &&
-          !matchedIcons.any((m) => m['label'] == label)) {
-        matchedIcons.add(predefinedIcon);
       }
     }
 
@@ -1106,7 +1084,9 @@ class _HomeScreenState extends State<HomeScreen> {
           color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.divider)),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+        // Bottom padding clears the system navigation bar (SDK 36 is always
+        // edge-to-edge), so the footer is not hidden underneath it.
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 12 + bottomBarInset(context)),
         child: RichText(
           text: TextSpan(
             children: [

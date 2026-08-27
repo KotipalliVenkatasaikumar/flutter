@@ -6,6 +6,7 @@ import 'package:ajna/screens/util.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 
 class IssueTypeReassign extends StatefulWidget {
   const IssueTypeReassign({super.key});
@@ -675,7 +676,9 @@ class _MyDataTableWidgetState extends State<IssueTypeReassign> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
       bottomNavigationBar: Container(
-        padding: EdgeInsets.zero,
+        // Bottom padding clears the system navigation bar (SDK 36 is always
+        // edge-to-edge), so the Back button is not hidden underneath it.
+        padding: EdgeInsets.only(bottom: bottomBarInset(context)),
         color: AppColors.primary,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
