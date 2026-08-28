@@ -195,17 +195,21 @@ class _FoSelfieCaptureScreenState extends State<FoSelfieCaptureScreen> {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => SuccessScreen()),
         );
-      } else if (response.statusCode == 417) {
-        ErrorHandler.handleError(
-          context,
-          'It\'s too early. Please try again closer to your scheduled time.',
-          'Expectation failed: ${response.statusCode}',
-        );
       } else {
-        ErrorHandler.handleError(
+        // Show whatever the server says went wrong. `/fieldOfficerPatrol/save`
+        // answers every failure with 417, so the status tells us nothing — the
+        // message in the body does. Since the backend started resolving a
+        // scanned QR by location + project + org + QR type, the common failure
+        // here is a scanned location that matches no active QR for the
+        // project; it is never the "scan too early" check, which lives on
+        // `/qrtransaction/save`.
+        ErrorHandler.handleResponseError(
           context,
-          'Failed to upload selfie. Please try again later.',
-          'Error uploading selfie: ${response.statusCode}',
+          response.body,
+          fallback: 'We could not save this patrol scan. Please try again, and '
+              'if it keeps failing ask your supervisor to check the QR setup.',
+          logDetails: 'FO patrol save failed '
+              '(${response.statusCode}): ${response.body}',
         );
       }
     } catch (e) {

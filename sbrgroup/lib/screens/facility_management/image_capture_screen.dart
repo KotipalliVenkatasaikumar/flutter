@@ -182,17 +182,16 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => SuccessScreen()),
         );
-      } else if (response.statusCode == 417) {
-        ErrorHandler.handleError(
-          context,
-          'It\'s too early. Please try again closer to your scheduled time.',
-          'Expectation failed: ${response.statusCode}',
-        );
       } else {
-        ErrorHandler.handleError(
+        // The server sends the reason with the response — the scan-too-early
+        // check, for one, words it better than we can here. Fall back only
+        // when it sends nothing usable.
+        ErrorHandler.handleResponseError(
           context,
-          'Failed to upload selfie. Please try again later.',
-          'Error uploading selfie: ${response.statusCode}',
+          response.body,
+          fallback: 'Failed to upload selfie. Please try again later.',
+          logDetails: 'QR transaction save failed '
+              '(${response.statusCode}): ${response.body}',
         );
       }
     } catch (e) {

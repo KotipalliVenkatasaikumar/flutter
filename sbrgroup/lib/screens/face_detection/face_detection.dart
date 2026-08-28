@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:ajna/screens/api_endpoints.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:ajna/screens/face_detection/embedding_service.dart';
+import 'package:ajna/screens/face_detection/shift_timings_model.dart';
 import 'package:ajna/screens/util.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -36,15 +37,22 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
   Timer? _countdownTimer;
   bool _isCountingDown = false;
 
-
-
-
   late CameraDescription _camera;
   late FlutterTts _flutterTts;
   List<double> _generatedEmbeddings = [];
   late FaceEmbeddingService _faceEmbeddingService;
   List<Map<String, dynamic>> _shifts = [];
   int? _selectedShiftId;
+
+  /// Whether the guard has accepted the shift and moved on to the camera.
+  ///
+  /// Separate from [_selectedShiftId] because that now arrives pre-filled from
+  /// the current time — without this the camera would open before the guard
+  /// ever saw which shift was picked.
+  bool _shiftConfirmed = false;
+
+  /// True when [_selectedShiftId] was chosen from the clock rather than tapped.
+  bool _shiftPickedByTime = false;
   int? _selectedLocationId;
   int? _organizationId;
   CameraLensDirection _currentDirection = CameraLensDirection.front;
@@ -117,8 +125,21 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
               .map((shifts) => {
                     'id': shifts['id'],
                     'refValue': shifts['refValue'] ?? '',
+                    // Carried so the shift can be matched to the clock — see
+                    // shiftIdForTime.
+                    'commonRefValue': shifts['commonRefValue'],
+                    'commonRefKey': shifts['commonRefKey'],
                   })
               .toList();
+
+          // Open on the shift that is running now, so the guard confirms
+          // rather than works it out. Null leaves the dropdown empty, as
+          // before, and they pick.
+          final suggested = shiftIdForTime(_shifts, DateTime.now());
+          if (suggested != null) {
+            _selectedShiftId = suggested;
+            _shiftPickedByTime = true;
+          }
 
           _isLoading = false; // Stop loading
         });
@@ -207,17 +228,14 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
     }
   }
 
-  Future<void> _showDialog(
-    BuildContext context,
-    String title,
-    String content,
-    {bool forceShowSettings = false}
-  ) async {
+  Future<void> _showDialog(BuildContext context, String title, String content,
+      {bool forceShowSettings = false}) async {
     if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        final bool showSettings = forceShowSettings || title.toLowerCase().contains('denied');
+        final bool showSettings =
+            forceShowSettings || title.toLowerCase().contains('denied');
         return AlertDialog(
           title: Text(title),
           content: Text(content),
@@ -243,8 +261,6 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
       },
     );
   }
-
-
 
   Future<void> _takePictureAndSendToAPI() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized)
@@ -389,8 +405,13 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
       Navigator.pop(context);
     }
 
+    // Back to the shift screen for the next guard, with the shift for the
+    // current time filled in again rather than blank.
     setState(() {
-      _selectedShiftId = null;
+      _shiftConfirmed = false;
+      final suggested = shiftIdForTime(_shifts, DateTime.now());
+      _selectedShiftId = suggested;
+      _shiftPickedByTime = suggested != null;
     });
   }
 
@@ -420,8 +441,7 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
     super.dispose();
   }
 
-
-    void _startCountdown() {
+  void _startCountdown() {
     _countdownTimer?.cancel();
     setState(() {
       _countdown = 3;
@@ -455,8 +475,7 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
     });
   }
 
-
-    Widget _buildCountdownOverlay(double width, double height) {
+  Widget _buildCountdownOverlay(double width, double height) {
     return Container(
       width: width,
       height: height,
@@ -475,7 +494,7 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
     );
   }
 
-    Widget _buildLoadingOverlay(double fontSize) {
+  Widget _buildLoadingOverlay(double fontSize) {
     return Container(
       color: Colors.black54,
       child: Center(
@@ -493,7 +512,6 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -531,12 +549,12 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: (_selectedShiftId == null)
+      body: (!_shiftConfirmed)
           ? Column(
-                children: [
-                  _buildShiftDropdown(),
-                ],
-              )
+              children: [
+                _buildShiftDropdown(),
+              ],
+            )
           : Stack(
               children: [
                 _buildCameraPreview(),
@@ -614,82 +632,122 @@ class _AttendanceScreenState extends State<FaceAttendanceScreen> {
     );
   }
 
-
-
   Widget _buildShiftDropdown() {
+    final bool canContinue = _selectedShiftId != null;
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12.0),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.3),
-              spreadRadius: 2,
-              blurRadius: 5,
-              offset: const Offset(0, 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.3),
+                  spreadRadius: 2,
+                  blurRadius: 5,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: DropdownButtonFormField2<int>(
-          decoration: InputDecoration(
-            labelText: 'Select Shift',
-            prefixIcon: Icon(Icons.schedule, color: Color.fromARGB(255, 41, 221, 200)),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderSide: const BorderSide(
-                  color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: const BorderSide(
-                  color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-          ),
-          value: _selectedShiftId,
-          items: _shifts.map((shift) {
-            return DropdownMenuItem<int>(
-              value: shift['id'],
-              child: Text(
-                shift['refValue'] ?? 'Unknown Shift',
-                style: TextStyle(
-                  fontSize: MediaQuery.of(context).size.width > 500 ? 18 : 16,
-                  color: Color.fromARGB(255, 80, 79, 79),
+            child: DropdownButtonFormField2<int>(
+              decoration: InputDecoration(
+                labelText: 'Select Shift',
+                prefixIcon: Icon(Icons.schedule,
+                    color: Color.fromARGB(255, 41, 221, 200)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(
+                      color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(
+                      color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
+                  borderRadius: BorderRadius.circular(8.0),
                 ),
               ),
-            );
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedShiftId = value;
-            });
-            if (_selectedShiftId != null && _cameraController != null && _cameraController!.value.isInitialized) {
-              _startCountdown();
-            }
-          },
-          validator: (value) {
-            if (value == null) {
-              return 'Please select a shift';
-            }
-            return null;
-          },
-          isExpanded: true,
-          dropdownStyleData: DropdownStyleData(
-            maxHeight: 300,
-            width: MediaQuery.of(context).size.width - 32,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8.0),
+              value: _selectedShiftId,
+              items: _shifts.map((shift) {
+                return DropdownMenuItem<int>(
+                  value: shift['id'],
+                  child: Text(
+                    shift['refValue'] ?? 'Unknown Shift',
+                    style: TextStyle(
+                      fontSize:
+                          MediaQuery.of(context).size.width > 500 ? 18 : 16,
+                      color: Color.fromARGB(255, 80, 79, 79),
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                // Only records the choice — the camera starts from Continue, so a
+                // mis-tap can still be corrected.
+                setState(() {
+                  _selectedShiftId = value;
+                  _shiftPickedByTime = false;
+                });
+              },
+              validator: (value) {
+                if (value == null) {
+                  return 'Please select a shift';
+                }
+                return null;
+              },
+              isExpanded: true,
+              dropdownStyleData: DropdownStyleData(
+                maxHeight: 300,
+                width: MediaQuery.of(context).size.width - 32,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
             ),
           ),
-        ),
+          const SizedBox(height: 12),
+          Text(
+            _shiftPickedByTime
+                ? 'Chosen from the current time. Change it only if you are on a different shift.'
+                : 'Select the shift you are working, then continue.',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: canContinue ? _confirmShift : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text(
+              'Continue',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-
-
+  /// Accepts the shift and moves on to the camera.
+  void _confirmShift() {
+    if (_selectedShiftId == null) return;
+    setState(() {
+      _shiftConfirmed = true;
+    });
+    if (_cameraController != null && _cameraController!.value.isInitialized) {
+      _startCountdown();
+    }
+  }
 }

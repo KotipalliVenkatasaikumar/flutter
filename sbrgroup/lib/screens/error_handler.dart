@@ -1,9 +1,63 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:ajna/screens/api_endpoints.dart';
 
 class ErrorHandler {
+  /// The message the backend sends with a failed response, or null.
+  ///
+  /// Most endpoints answer a failure with `{"message": "..."}` written for the
+  /// person using the app — "It's too early.Please try again closer to your
+  /// scheduled time" — and that wording is better than anything guessed on this
+  /// side, so it is what we show.
+  ///
+  /// Returns null when the body carries nothing usable, so the caller falls
+  /// back to its own wording. A body that is really a crash — a Java exception,
+  /// a stack trace, a stray status line — is treated as unusable: those are for
+  /// the log, never for the user.
+  static String? serverMessage(String? body) {
+    if (body == null || body.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return null;
+      final message = decoded['message'];
+      if (message is! String) return null;
+
+      final trimmed = message.trim();
+      if (trimmed.isEmpty || trimmed.length > 200) return null;
+
+      // Anything that reads like a crash rather than a sentence for the user.
+      final looksTechnical = RegExp(
+        r'Exception|Error:|java\.|org\.springframework|\bat\s+com\.|nested',
+        caseSensitive: false,
+      ).hasMatch(trimmed);
+      if (looksTechnical) return null;
+
+      return trimmed;
+    } catch (_) {
+      // Not JSON — an HTML error page or a gateway response.
+      return null;
+    }
+  }
+
+  /// Shows the backend's own message for a failed response when it sends a
+  /// usable one, otherwise [fallback].
+  ///
+  /// [logDetails] is only ever printed to the console — status codes and raw
+  /// bodies must not reach the dialog.
+  static void handleResponseError(
+    BuildContext context,
+    String? responseBody, {
+    required String fallback,
+    String? logDetails,
+  }) {
+    if (logDetails != null) debugPrint(logDetails);
+    handleError(context, serverMessage(responseBody) ?? fallback,
+        logDetails ?? '');
+  }
+
   static void handleError(
       BuildContext context, String userMessage, String errorDetails) {
     // Show custom message to user via SnackBar
