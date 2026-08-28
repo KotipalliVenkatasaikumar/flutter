@@ -822,11 +822,18 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
           },
         );
       } else {
-        // throw Exception('Failed to send QR data to backend');
-        ErrorHandler.handleError(
+        // A location name is now unique within a project, organisation and QR
+        // type, so saving a name that is already taken fails here. Show the
+        // reason the server gives rather than "try again later", which would
+        // never work for a duplicate name.
+        ErrorHandler.handleResponseError(
           context,
-          'Failed to send QR data. Please try again later.',
-          'Error sending QR data: ${response.statusCode}',
+          response.body,
+          fallback: 'Could not save this QR. A QR with this location name may '
+              'already exist for the selected project — check the location '
+              'name and try again.',
+          logDetails:
+              'QR save failed (${response.statusCode}): ${response.body}',
         );
       }
     } catch (e) {
