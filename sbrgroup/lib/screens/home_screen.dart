@@ -229,6 +229,14 @@ class _HomeScreenState extends State<HomeScreen> {
       'label': 'Scan Report',
       'onTap': () => ReportsHomeScreen(),
     },
+
+    {
+      //'icon': Icons.bar_chart,
+      'icon': Icons.how_to_reg_rounded,
+      'imagePath': null,
+      'label': 'Facial Attendance',
+      'onTap': () => AttendanceDashboardScreen(),
+    },
     {
       //'icon': Icons.dataset_linked,
       'icon': Icons.autorenew_rounded,
@@ -381,13 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'onTap': () => AdminFaceRegisterScreen(),
     },
 
-    {
-      //'icon': Icons.bar_chart,
-      'icon': Icons.how_to_reg_rounded,
-      'imagePath': null,
-      'label': 'Facial Attendance',
-      'onTap': () => AttendanceDashboardScreen(),
-    },
+    
     {
       // No artwork for parking yet — the tile falls back to a Material icon,
       // which IconButtonWidget already supports via `icon`.

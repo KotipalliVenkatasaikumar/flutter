@@ -47,6 +47,11 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
 
   late List<String> years;
 
+  /// True while the report is being generated. The button used to look
+  /// idle for the whole round trip, so a second tap started a second
+  /// download.
+  bool _isGenerating = false;
+
   @override
   void initState() {
     super.initState();
@@ -61,17 +66,13 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
     selectedStatus = widget.selectedStatus;
   }
 
-  @override
-  void didUpdateWidget(covariant GenerateReportScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    print('selectedLocationId: '
-        '[32m$selectedLocationId[0m, selectedMonthNumber: '
-        '[32m$selectedMonthNumber[0m, selectedYearNumber: '
-        '[32m$selectedYearNumber[0m');
-  }
-
+  /// Asks for the permission but does not gate on the answer: on Android 11+
+  /// the app writes through the media store and the legacy storage grant is
+  /// reported as denied even where the save works. Kept as-is deliberately —
+  /// returning `status.isGranted` here would block a download that succeeds.
   Future<bool> _requestPermission(Permission permission) async {
     final status = await permission.request();
+    debugPrint('Storage permission: $status');
     return true;
   }
 
@@ -119,6 +120,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
         return;
       }
     }
+    setState(() => _isGenerating = true);
     try {
       print('Calling ApiService.generateAttendanceExcel with locationId: '
           '\u001b[32m$selectedLocationId\u001b[0m, month: '
@@ -204,38 +206,39 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
           ),
         );
       } else {
-        print(
-            'Failed to generate Excel report. Status: [32m${response.statusCode}[0m');
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Error'),
-            content: const Text('Failed to generate Excel report.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
+        // The status code stays in the log; the user gets a sentence.
+        debugPrint('Report failed: HTTP ${response.statusCode}');
+        _showMessage('Could not generate the report',
+            'The report could not be prepared for that month. Please try '
+                'again.');
       }
     } catch (e) {
-      print('Exception in generateExcelReport: $e');
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Error'),
-          content: Text('Error: $e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+      debugPrint('Exception in generateExcelReport: $e');
+      _showMessage('Could not generate the report',
+          'Something went wrong while saving the file. Please check your '
+              'connection and try again.');
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
     }
+  }
+
+  /// Shared dialog for every message this screen raises.
+  void _showMessage(String title, String content) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontSize: 17)),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -258,7 +261,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
           ),
         ),
         title: Text(
-          'Attendance Report',
+          'Generate Report',
           style: TextStyle(
             fontSize: screenWidth > 600 ? 22 : 18,
             color: Colors.white,
@@ -267,6 +270,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
+      backgroundColor: AppColors.bg,
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -318,7 +322,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                               width: screenWidth - 80,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12.0),
-                                color: Colors.white,
+                                color: AppColors.surface,
                               ),
                             ),
                           ),
@@ -357,7 +361,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                               width: screenWidth - 80,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12.0),
-                                color: Colors.white,
+                                color: AppColors.surface,
                               ),
                             ),
                           ),
@@ -405,7 +409,7 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                               width: screenWidth - 80,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12.0),
-                                color: Colors.white,
+                                color: AppColors.surface,
                               ),
                             ),
                           ),
@@ -417,9 +421,22 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      icon: const Icon(Icons.download, color: Colors.white),
-                      label: const Text('Generate Report',
-                          style: TextStyle(fontSize: 18)),
+                      icon: _isGenerating
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.download, color: Colors.white),
+                      label: Text(
+                          _isGenerating
+                              ? 'Preparing report…'
+                              : 'Generate Report',
+                          style: const TextStyle(fontSize: 18)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -429,7 +446,9 @@ class _GenerateReportScreenState extends State<GenerateReportScreen> {
                         ),
                         elevation: 4,
                       ),
-                      onPressed: () async {
+                      onPressed: _isGenerating
+                          ? null
+                          : () async {
                         if (selectedMonth == null ||
                             selectedYear == null ||
                             selectedLocation == null) {
