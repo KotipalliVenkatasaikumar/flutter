@@ -25,11 +25,11 @@ class ApiService {
   // static const String baseUrl4 = 'http://15.207.212.144/';
   // static const String notificationUrl = 'http://15.207.212.144';
 
-  // static const String baseUrl1 = 'http://192.168.0.33:1093/';
-  // static const String baseUrl2 = 'http://192.168.0.33:1093/';
-  // static const String baseUrl3 = 'http://192.168.0.33:1093/';
-  // static const String baseUrl4 = 'http://192.168.0.33:1093/';
-  // static const String notificationUrl = 'http://192.168.0.33:1093';
+  // static const String baseUrl1 = 'http://192.168.0.15:1093/';
+  // static const String baseUrl2 = 'http://192.168.0.15:1093/';
+  // static const String baseUrl3 = 'http://192.168.0.15:1093/';
+  // static const String baseUrl4 = 'http://192.168.0.15:1093/';
+  // static const String notificationUrl = 'http://192.168.0.15:1093';
 
   static const String baseUrl1 = 'https://sbrgroup.salesncrm.com/';
   static const String baseUrl2 = 'https://sbrgroup.salesncrm.com/';
@@ -454,6 +454,29 @@ class ApiService {
       int projectId, int selectedOrgId) async {
     return await getRequest(baseUrl2,
         'api/facility-management/facility/getAll/withoutpage?orgId=$selectedOrgId&projectId=$projectId');
+  }
+
+  /// Every QR of an organization, optionally narrowed to one project or one QR
+  /// type. Pass qrTypeId 0 for all types; omitting it entirely makes the server
+  /// fall back to Security-only, which is the older behaviour other screens use.
+  static Future<http.Response> fetchQrCodes({
+    required int orgId,
+    String projectId = '',
+    int qrTypeId = 0,
+    String location = '',
+  }) async {
+    return await getRequest(
+        baseUrl2,
+        'api/facility-management/facility/getAll/withoutpage?orgId=$orgId'
+        '&projectId=$projectId&qrTypeId=$qrTypeId'
+        '&location=${Uri.encodeQueryComponent(location)}');
+  }
+
+  /// Activates or deactivates a QR. Status 'A' is active, 'I' inactive.
+  /// Preferred over delete, which would orphan the scan history.
+  static Future<http.Response> updateQrStatus(int id, String status) async {
+    return await putRequest(
+        baseUrl2, 'api/facility-management/facility/status/$id?status=$status', {});
   }
 
   static Future<http.Response> postQrData(Map<String, dynamic> qrData) async {
@@ -1259,6 +1282,31 @@ class ApiService {
         'api/facility-management/fieldOfficerPatrol/getallfiledofficepatrol?organizationId=$organizationId&projectId=$projectId&rangeOfDays=$selectedDateRange&page=$page&size=$pageSize&userName=$searchQuery');
   }
 
+  /// Totals, per-project, per-officer and per-day figures for the FO report.
+  /// Same date-range contract as [fetchFieldOfficerPatrolReports].
+  static Future<http.Response> fetchFieldOfficerAnalytics(
+    int organizationId,
+    String projectId,
+    String selectedDateRange,
+    String searchQuery,
+  ) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/fieldOfficerPatrol/analytics?organizationId=$organizationId&projectId=$projectId&rangeOfDays=$selectedDateRange&userName=${Uri.encodeQueryComponent(searchQuery)}');
+  }
+
+  /// Assigned FO visits with no scan: "Missed" on past days, "Pending" today.
+  static Future<http.Response> fetchFieldOfficerMissedVisits(
+    int organizationId,
+    String projectId,
+    String selectedDateRange,
+    int page,
+    int pageSize,
+    String searchQuery,
+  ) async {
+    return await getRequest(baseUrl2,
+        'api/facility-management/fieldOfficerPatrol/missed?organizationId=$organizationId&projectId=$projectId&rangeOfDays=$selectedDateRange&page=$page&size=$pageSize&userName=${Uri.encodeQueryComponent(searchQuery)}');
+  }
+
   static Future<http.Response> FodownloadImage({
     required String projectName,
     required String date,
@@ -1797,42 +1845,76 @@ class ApiService {
   static const String _manualAttendance =
       'api/facility-management/manualattendance';
 
+  /// Traces one manual attendance call: the verb, the full URL that was hit,
+  /// what was sent with it and the status and body that came back.
+  ///
+  /// Every call on this screen is a query string built out of five filters, so
+  /// when the sheet arrives empty or an action is refused the answer is nearly
+  /// always in the URL rather than in the screen. It is logged here so the
+  /// screen itself never has to show a status code to a supervisor.
+  static http.Response _traceManualAttendance(
+    String verb,
+    String endpoint,
+    http.Response response, {
+    Object? payload,
+  }) {
+    final body = response.body.length > 400
+        ? '${response.body.substring(0, 400)}…'
+        : response.body;
+    debugPrint('ManualAttendance → $verb $baseUrl1$endpoint'
+        '${payload == null ? '' : '\n   body: ${json.encode(payload)}'}'
+        '\n   ← ${response.statusCode} $body');
+    return response;
+  }
+
   /// The sheet itself, paged.
   ///
+  /// The day is a **range**: the controller binds `startDate` and `endDate` and
+  /// knows no `attendanceDate`, so a parameter by that name is dropped by Spring
+  /// without a word and the sheet comes back unfiltered by date. Both are
+  /// `yyyy-MM-dd`, and the same day in both is the single-day sheet the web
+  /// opens on.
+  ///
   /// Every filter is optional to the backend: `0` means "any" for the id
-  /// filters and an empty string means "any" for the date and the two text
+  /// filters and an empty string means "any" for the dates and the two text
   /// searches, so the defaults are passed through rather than omitted.
   static Future<http.Response> getManualAttendances({
     int page = 0,
     int size = 15,
     int locationId = 0,
-    String attendanceDate = '',
+    String startDate = '',
+    String endDate = '',
     int shiftId = 0,
     int statusId = 0,
     String userName = '',
     String employeeNumber = '',
   }) async {
-    return await getRequest(
-        baseUrl1,
-        '$_manualAttendance/getAllManualAttendances'
+    final endpoint = '$_manualAttendance/getAllManualAttendances'
         '?page=$page&size=$size&locationId=$locationId'
-        '&attendanceDate=$attendanceDate&shiftId=$shiftId&statusId=$statusId'
+        '&startDate=$startDate&endDate=$endDate'
+        '&shiftId=$shiftId&statusId=$statusId'
         '&userName=${Uri.encodeQueryComponent(userName)}'
-        '&employeeNumber=${Uri.encodeQueryComponent(employeeNumber)}');
+        '&employeeNumber=${Uri.encodeQueryComponent(employeeNumber)}';
+    return _traceManualAttendance(
+        'GET', endpoint, await getRequest(baseUrl1, endpoint));
   }
 
-  /// Header counts for the chosen site and day — logged in, pending, verified,
-  /// removed and moved out. Not affected by the status filter, which is why it
-  /// is a separate call rather than a field on the page.
+  /// Header counts for the chosen site and range — logged in, pending,
+  /// verified, removed and moved out. Not affected by the status filter, which
+  /// is why it is a separate call rather than a field on the page.
+  ///
+  /// Takes the same `startDate`/`endDate` pair as the sheet, so the counts and
+  /// the rows under them always describe the same days.
   static Future<http.Response> getManualAttendanceCount({
     int locationId = 0,
-    String attendanceDate = '',
+    String startDate = '',
+    String endDate = '',
     int shiftId = 0,
   }) async {
-    return await getRequest(
-        baseUrl1,
-        '$_manualAttendance/count?locationId=$locationId'
-        '&attendanceDate=$attendanceDate&shiftId=$shiftId');
+    final endpoint = '$_manualAttendance/count?locationId=$locationId'
+        '&startDate=$startDate&endDate=$endDate&shiftId=$shiftId';
+    return _traceManualAttendance(
+        'GET', endpoint, await getRequest(baseUrl1, endpoint));
   }
 
   /// The options of the status filter.
@@ -1841,7 +1923,9 @@ class ApiService {
   /// called is configured rather than written into the app — the screen opens
   /// on the first one the backend returns.
   static Future<http.Response> getManualAttendanceStatuses() async {
-    return await getRequest(baseUrl1, '$_manualAttendance/statuses');
+    const endpoint = '$_manualAttendance/statuses';
+    return _traceManualAttendance(
+        'GET', endpoint, await getRequest(baseUrl1, endpoint));
   }
 
   /// Ticks the punches the supervisor accepted.
@@ -1850,11 +1934,15 @@ class ApiService {
     required int verifiedBy,
     String remarks = '',
   }) async {
-    return await postRequest(baseUrl1, '$_manualAttendance/verify', {
+    const endpoint = '$_manualAttendance/verify';
+    final payload = {
       'attendanceIds': attendanceIds,
       'verifiedBy': verifiedBy,
       'remarks': remarks,
-    });
+    };
+    return _traceManualAttendance(
+        'POST', endpoint, await postRequest(baseUrl1, endpoint, payload),
+        payload: payload);
   }
 
   /// Takes back ticks that were saved earlier.
@@ -1863,11 +1951,15 @@ class ApiService {
     required int verifiedBy,
     String remarks = '',
   }) async {
-    return await postRequest(baseUrl1, '$_manualAttendance/unverify', {
+    const endpoint = '$_manualAttendance/unverify';
+    final payload = {
       'attendanceIds': attendanceIds,
       'verifiedBy': verifiedBy,
       'remarks': remarks,
-    });
+    };
+    return _traceManualAttendance(
+        'POST', endpoint, await postRequest(baseUrl1, endpoint, payload),
+        payload: payload);
   }
 
   /// Removes a punch that should never have been recorded.
@@ -1879,10 +1971,10 @@ class ApiService {
     required int removedBy,
     String remarks = '',
   }) async {
-    return await deleteRequest(
-        baseUrl1,
-        '$_manualAttendance/remove/$attendanceId?removedBy=$removedBy'
-        '&remarks=${Uri.encodeQueryComponent(remarks)}');
+    final endpoint = '$_manualAttendance/remove/$attendanceId'
+        '?removedBy=$removedBy&remarks=${Uri.encodeQueryComponent(remarks)}';
+    return _traceManualAttendance(
+        'DELETE', endpoint, await deleteRequest(baseUrl1, endpoint));
   }
 
   /// Sends a punch to the site it was actually worked at — marked in at one
@@ -1894,12 +1986,11 @@ class ApiService {
     required int movedBy,
     String remarks = '',
   }) async {
-    return await putRequest(
-        baseUrl1,
-        '$_manualAttendance/move/$attendanceId'
+    final endpoint = '$_manualAttendance/move/$attendanceId'
         '?movedLocationId=$movedLocationId&movedBy=$movedBy'
-        '&remarks=${Uri.encodeQueryComponent(remarks)}',
-        {});
+        '&remarks=${Uri.encodeQueryComponent(remarks)}';
+    return _traceManualAttendance(
+        'PUT', endpoint, await putRequest(baseUrl1, endpoint, {}));
   }
 
   /// Brings a moved punch back to the site it was marked at.
@@ -1910,8 +2001,10 @@ class ApiService {
     required int manualAttendanceId,
     required int movedBy,
   }) async {
-    return await putRequest(baseUrl1,
-        '$_manualAttendance/undo-move/$manualAttendanceId?movedBy=$movedBy', {});
+    final endpoint =
+        '$_manualAttendance/undo-move/$manualAttendanceId?movedBy=$movedBy';
+    return _traceManualAttendance(
+        'PUT', endpoint, await putRequest(baseUrl1, endpoint, {}));
   }
 
   /// Puts back a punch that was removed by mistake.
@@ -1919,9 +2012,10 @@ class ApiService {
     required int manualAttendanceId,
     required int restoredBy,
   }) async {
-    return await putRequest(baseUrl1,
-        '$_manualAttendance/restore/$manualAttendanceId?restoredBy=$restoredBy',
-        {});
+    final endpoint =
+        '$_manualAttendance/restore/$manualAttendanceId?restoredBy=$restoredBy';
+    return _traceManualAttendance(
+        'PUT', endpoint, await putRequest(baseUrl1, endpoint, {}));
   }
 
   // ===========================================================================

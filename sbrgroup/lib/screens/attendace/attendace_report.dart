@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:ajna/main.dart';
@@ -6,16 +7,13 @@ import 'package:ajna/screens/attendace/absent_list_screen.dart';
 import 'package:ajna/screens/attendace/generate_report_screen.dart';
 import 'package:ajna/screens/connectivity_handler.dart';
 import 'package:ajna/screens/error_handler.dart';
-import 'package:ajna/screens/facility_management/custom_date_picker.dart';
 import 'package:ajna/screens/util.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:multi_select_flutter/dialog/multi_select_dialog_field.dart';
-import 'package:multi_select_flutter/util/multi_select_item.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ajna/theme/app_colors.dart';
+import 'package:ajna/theme/responsive.dart';
 
 class Attendance {
   final int count;
@@ -309,6 +307,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -341,9 +341,16 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     }
   }
 
+  /// Guards the paging fetch below. The listener fires on every scroll
+  /// notification, so sitting at the bottom of the page used to queue one
+  /// request after another.
+  bool _isLoadingMore = false;
+
   void _scrollListener() {
     if (_scrollController.position.pixels ==
         _scrollController.position.maxScrollExtent) {
+      if (_isLoadingMore) return;
+      _isLoadingMore = true;
       setState(() {
         size += 10; // Increase the size by 10 each time
       });
@@ -363,7 +370,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         }
       }
 
-      fetchAttendanceDetails(statusToFetch, '');
+      fetchAttendanceDetails(statusToFetch, '')
+          .whenComplete(() => _isLoadingMore = false);
     }
   }
 
@@ -898,61 +906,776 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     return 0;
   }
 
-  /// A headline count. Tapping loads that status into the attendance list, so
-  /// the selected one is outlined to show where the list below came from.
-  Widget _kpiCard({
-    required String label,
-    required int count,
+  int get _loggedInCount => _countFor('Logged In');
+  int get _notLoggedInCount => _countFor('Not Logged In');
+  int get _headcount => _loggedInCount + _notLoggedInCount;
+
+  /// Share of the headcount that has logged in, 0–1.
+  double get _presenceRate => _headcount == 0 ? 0 : _loggedInCount / _headcount;
+
+  // ---------------------------------------------------------------------------
+  // Search
+  // ---------------------------------------------------------------------------
+  /// Held so the field can be cleared from its own suffix button.
+  final TextEditingController _searchController = TextEditingController();
+
+  /// Typing used to fire a request on every keystroke past the third. The
+  /// timer collapses a burst of typing into one call.
+  Timer? _searchDebounce;
+
+  void _onSearchChanged(String value) {
+    setState(() => searchQuery = value);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      if (searchQuery.length >= 3 || searchQuery.isEmpty) {
+        fetchAttendanceDetails(selectedStatus, searchQuery);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filter summary — what the collapsed "Filters" card reports, so the numbers
+  // below it are never read against filters the user cannot see.
+  // ---------------------------------------------------------------------------
+  String get _dateRangeLabel {
+    final String r = selectedDateRange;
+    if (r.startsWith('&startDate=')) {
+      try {
+        final parts = r.split('&');
+        final start = DateTime.parse(parts[1].split('=')[1]);
+        final end = DateTime.parse(parts[2].split('=')[1]);
+        final f = DateFormat('d MMM');
+        return '${f.format(start)} – ${f.format(end)}';
+      } catch (_) {
+        return 'Custom range';
+      }
+    }
+    switch (r) {
+      case '0':
+        return 'Today';
+      case '1':
+        return 'Yesterday';
+      case '7':
+        return 'Last 7 days';
+      case '15':
+        return 'Last 15 days';
+      case '13':
+        return 'This month';
+      case '30':
+        return 'Last month';
+      case '130':
+        return 'Last 30 days';
+      case '90':
+        return 'Last 90 days';
+      default:
+        return 'Today';
+    }
+  }
+
+  String get _locationLabel {
+    if (selectedLocation == '0') return 'All sites';
+    for (final l in locations) {
+      if (l.id.toString() == selectedLocation) return l.location;
+    }
+    return 'All sites';
+  }
+
+  String get _roleLabel {
+    if (selectedRole == '0') return 'All roles';
+    for (final r in _selectableRoles) {
+      if (r.roleId.toString() == selectedRole) return r.roleName;
+    }
+    return 'All roles';
+  }
+
+  String get _shiftLabel {
+    if (selectedShifts.isEmpty || selectedShiftIds.contains(0)) {
+      return 'All shifts';
+    }
+    if (selectedShifts.length == 1) return selectedShifts.first.commonRefKey;
+    return '${selectedShifts.length} shifts';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filter bar
+  // ---------------------------------------------------------------------------
+  /// A filter drawn as a chip that IS the control: the label says what is
+  /// applied and tapping opens a sheet for that one filter.
+  ///
+  /// It replaces the "Filters" card, which stacked three dropdowns and a shift
+  /// panel behind a chevron and — even collapsed — pushed the counts most of a
+  /// screen down the page.
+  Widget _filterPill({
     required IconData icon,
-    required MaterialColor tone,
+    required String label,
+    required bool isDefault,
     required VoidCallback onTap,
   }) {
-    final bool selected = activeView == 'attendance' && selectedStatus == label;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
-        decoration: BoxDecoration(
-          color: tone.shade50,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? tone.shade400 : tone.shade100,
-            width: selected ? 1.8 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    // A filter that is doing something reads as filled; an untouched one stays
+    // quiet, so "what am I actually looking at" is answerable at a glance.
+    final Color fg = isDefault ? AppColors.textSecondary : AppColors.primary;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: isDefault
+            ? AppColors.surface
+            : AppColors.tint(AppColors.primary, 0.10),
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Ink(
+            padding: const EdgeInsets.fromLTRB(11, 8, 8, 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDefault
+                    ? AppColors.divider
+                    : AppColors.tint(AppColors.primary, 0.22),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 18, color: tone.shade600),
-                const SizedBox(width: 6),
-                Expanded(
+                Icon(icon, size: 14, color: fg),
+                const SizedBox(width: 5),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 130),
                   child: Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: isDefault ? FontWeight.w500 : FontWeight.w700,
+                      color: fg,
                     ),
                   ),
                 ),
+                Icon(Icons.expand_more_rounded, size: 16, color: fg),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: tone.shade700,
-                height: 1.1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _filterBar() {
+    return SizedBox(
+      height: 38,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _filterPill(
+            icon: Icons.event_outlined,
+            label: _dateRangeLabel,
+            isDefault: selectedDateRange == '0',
+            onTap: _openDateSheet,
+          ),
+          _filterPill(
+            icon: Icons.location_on_outlined,
+            label: _locationLabel,
+            isDefault: selectedLocation == '0',
+            onTap: _openLocationSheet,
+          ),
+          _filterPill(
+            icon: Icons.badge_outlined,
+            label: _roleLabel,
+            isDefault: selectedRole == '0',
+            onTap: _openRoleSheet,
+          ),
+          _filterPill(
+            icon: Icons.access_time,
+            label: _shiftLabel,
+            isDefault: selectedShifts.isEmpty || selectedShiftIds.contains(0),
+            onTap: _openShiftSheet,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filter sheets
+  // ---------------------------------------------------------------------------
+  /// Shared chrome for the four filter sheets.
+  Future<void> _showFilterSheet({
+    required String title,
+    required Widget Function(BuildContext sheetContext) builder,
+  }) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.75,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.divider,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 8, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: AppColors.textSecondary),
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(child: builder(sheetContext)),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// One selectable line in a single-choice sheet.
+  Widget _sheetOption({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color:
+                      selected ? AppColors.primary : AppColors.textPrimary,
+                ),
               ),
             ),
+            if (selected)
+              const Icon(Icons.check_rounded,
+                  size: 19, color: AppColors.primary),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// The preset ranges, in the order the web dashboard lists them. Codes are
+  /// the values the API already expects.
+  static const List<List<String>> _datePresets = [
+    ['0', 'Today'],
+    ['1', 'Yesterday'],
+    ['7', 'Last 7 Days'],
+    ['15', 'Last 15 Days'],
+    ['13', 'This Month'],
+    ['30', 'Last Month'],
+    ['130', 'Last 30 Days'],
+    ['90', 'Last 90 Days'],
+  ];
+
+  /// Start and end for a preset code — the same arithmetic
+  /// CustomDateRangePicker does, so the request is unchanged.
+  List<DateTime> _presetRange(String code) {
+    final DateTime now = DateTime.now();
+    switch (code) {
+      case '1':
+        final d = now.subtract(const Duration(days: 1));
+        return [d, d];
+      case '7':
+        return [now.subtract(const Duration(days: 7)), now];
+      case '15':
+        return [now.subtract(const Duration(days: 15)), now];
+      case '13':
+        return [DateTime(now.year, now.month, 1), now];
+      case '30':
+        return [
+          DateTime(now.year, now.month - 1, 1),
+          DateTime(now.year, now.month, 0),
+        ];
+      case '130':
+        return [now.subtract(const Duration(days: 30)), now];
+      case '90':
+        return [now.subtract(const Duration(days: 90)), now];
+      default:
+        return [now, now];
+    }
+  }
+
+  /// Date range. The presets are rows in the sheet itself: putting the old
+  /// dropdown in here meant a menu opening on top of a sheet — two stacked
+  /// overlays for one choice.
+  void _openDateSheet() {
+    _showFilterSheet(
+      title: 'Date range',
+      builder: (sheetContext) => ListView(
+        shrinkWrap: true,
+        children: [
+          ..._datePresets.map(
+            (preset) => _sheetOption(
+              label: preset[1],
+              selected: selectedDateRange == preset[0],
+              onTap: () {
+                Navigator.pop(sheetContext);
+                final range = _presetRange(preset[0]);
+                _onDateRangeSelected(range[0], range[1], preset[0]);
+              },
+            ),
+          ),
+          Divider(height: 1, color: AppColors.divider),
+          _sheetOption(
+            label: selectedDateRange.startsWith('&startDate=')
+                ? _dateRangeLabel
+                : 'Custom range…',
+            selected: selectedDateRange.startsWith('&startDate='),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _pickCustomRange();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Two-date picker for a custom span. The string handed back is byte for
+  /// byte what the old dialog produced.
+  Future<void> _pickCustomRange() async {
+    final DateTime now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: now,
+      helpText: 'Select date range',
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context)
+              .colorScheme
+              .copyWith(primary: AppColors.primary),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    _onDateRangeSelected(
+      picked.start,
+      picked.end,
+      '&startDate=${DateFormat('yyyy-MM-ddT00:00:00').format(picked.start)}'
+      '&endDate=${DateFormat('yyyy-MM-ddT23:59:59').format(picked.end)}',
+    );
+  }
+
+  void _openLocationSheet() {
+    String query = '';
+    _showFilterSheet(
+      title: 'Location',
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final List<Location> shown = query.isEmpty
+              ? locations
+              : locations
+                  .where((l) =>
+                      l.location.toLowerCase().contains(query.toLowerCase()))
+                  .toList();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (locations.length > 6)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                  child: TextField(
+                    autofocus: false,
+                    onChanged: (v) => setSheetState(() => query = v),
+                    style: TextStyle(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Search site',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppColors.divider),
+                      ),
+                    ),
+                  ),
+                ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    _sheetOption(
+                      label: 'All sites',
+                      selected: selectedLocation == '0',
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        _applyLocation('0');
+                      },
+                    ),
+                    ...shown.map(
+                      (l) => _sheetOption(
+                        label: l.location,
+                        selected: selectedLocation == l.id.toString(),
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _applyLocation(l.id.toString());
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Same three refreshes the location dropdown ran.
+  void _applyLocation(String value) {
+    setState(() => selectedLocation = value);
+    // Refreshes all three views — the role and site breakdowns are started
+    // inside, so calling either again here would only duplicate the request.
+    fetchAttendanceDashboard();
+    fetchAttendanceDetails(selectedStatus, '');
+    // The role list is scoped to location.
+    fetchRoles();
+  }
+
+  void _openRoleSheet() {
+    _showFilterSheet(
+      title: 'Role',
+      builder: (sheetContext) => ListView(
+        shrinkWrap: true,
+        children: [
+          _sheetOption(
+            label: 'All roles',
+            selected: selectedRole == '0',
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _applyRole('0');
+            },
+          ),
+          ..._selectableRoles.map(
+            (r) => _sheetOption(
+              label: r.roleName,
+              selected: selectedRole == r.roleId.toString(),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _applyRole(r.roleId.toString());
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _applyRole(String value) {
+    setState(() => selectedRole = value);
+    fetchAttendanceDashboard();
+    fetchAttendanceDetails(selectedStatus, '');
+  }
+
+  /// Shifts are multi-select, so the sheet edits a local copy and applies once
+  /// — toggling used to fire a dashboard request per tick.
+  void _openShiftSheet() {
+    List<ShiftTiming> draft = List<ShiftTiming>.from(selectedShifts);
+    // The synthetic "All Shifts" row fetchShiftData() inserts at id 0.
+    final Iterable<ShiftTiming> allRows = shifts.where((s) => s.id == 0);
+    final ShiftTiming? allShift = allRows.isEmpty ? null : allRows.first;
+
+    _showFilterSheet(
+      title: 'Shifts',
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final bool allSelected =
+              draft.isEmpty || draft.any((s) => s.id == 0);
+
+          void selectGroup(String match) {
+            setSheetState(() {
+              draft =
+                  shifts.where((s) => s.commonRefKey.contains(match)).toList();
+            });
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // The old Morning / Night quick buttons, kept.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => selectGroup('Morning'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: BorderSide(color: AppColors.divider),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('Morning',
+                            style: TextStyle(fontSize: 12.5)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => selectGroup('Night'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: BorderSide(color: AppColors.divider),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('Night',
+                            style: TextStyle(fontSize: 12.5)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    _sheetOption(
+                      label: 'All shifts',
+                      selected: allSelected,
+                      onTap: () => setSheetState(() {
+                        draft = allShift == null ? [] : [allShift];
+                      }),
+                    ),
+                    ...shifts.where((s) => s.id != 0).map(
+                          (shift) => CheckboxListTile(
+                            dense: true,
+                            controlAffinity: ListTileControlAffinity.trailing,
+                            activeColor: AppColors.primary,
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 18),
+                            title: Text(
+                              '${shift.commonRefKey} · ${shift.commonRefValue}',
+                              style: TextStyle(
+                                  fontSize: 13.5,
+                                  color: AppColors.textPrimary),
+                            ),
+                            value: draft.any((s) => s.id == shift.id),
+                            onChanged: (checked) => setSheetState(() {
+                              draft.removeWhere((s) => s.id == 0);
+                              if (checked == true) {
+                                if (!draft.any((s) => s.id == shift.id)) {
+                                  draft.add(shift);
+                                }
+                              } else {
+                                draft.removeWhere((s) => s.id == shift.id);
+                              }
+                            }),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      setState(() {
+                        // Nothing ticked means "everything", the same value the
+                        // screen starts on.
+                        selectedShifts = draft.isEmpty
+                            ? (allShift == null ? [] : [allShift])
+                            : draft;
+                        selectedShiftIds =
+                            selectedShifts.map((s) => s.id).toList();
+                      });
+                      fetchAttendanceDashboard();
+                    },
+                    child: const Text('Apply',
+                        style: TextStyle(
+                            fontSize: 14.5, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Headline numbers
+  // ---------------------------------------------------------------------------
+  /// Counts and presence in one card. They were three separate cards stacked
+  /// down the page, which is a lot of height for four numbers.
+  Widget _summaryCard() {
+    final int total = _headcount;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 14, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _statHalf(
+                label: 'Logged In',
+                count: _loggedInCount,
+                tone: AppColors.success,
+                status: 'Logged In',
+              ),
+              Container(
+                width: 1,
+                height: 34,
+                color: AppColors.divider,
+              ),
+              _statHalf(
+                label: 'Not Logged In',
+                count: _notLoggedInCount,
+                tone: AppColors.danger,
+                status: 'Not Logged In',
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: total == 0 ? 0 : _presenceRate,
+              minHeight: 8,
+              backgroundColor: total == 0
+                  ? AppColors.surfaceAlt
+                  : AppColors.tint(AppColors.danger, 0.14),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.success),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              total == 0 ? 'No headcount yet' : '$total total',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textFaint),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Half of the summary card's footer. Tapping still loads that status into
+  /// the list below, and the loaded one is tinted so the list has a source.
+  Widget _statHalf({
+    required String label,
+    required int count,
+    required Color tone,
+    required String status,
+  }) {
+    final bool selected =
+        activeView == 'attendance' && selectedStatus == status;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() {
+            activeView = 'attendance';
+            selectedStatus = status;
+          });
+          fetchAttendanceDetails(selectedStatus, '');
+        },
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.tint(tone, 0.10) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                  color: tone,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -963,6 +1686,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   /// Shares [_breakdownRow] with the site view so both read as the same table —
   /// Role, Logged In, Not Logged In, Total — rather than one being cards and
   /// the other columns.
+  ///
+  /// Not scrollable itself: the whole page is one scroll view, so a nested
+  /// list here would trap the drag and needed a hard-coded height to exist.
   Widget _roleBreakdownList() {
     if (roleReportDetails.isEmpty) {
       return _emptyBreakdown();
@@ -972,10 +1698,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _breakdownHeader('Role'),
-        // Total sits above the rows and outside the scrollable, not under them
-        // as the web table has it: on a phone the bottom of a fifteen-row list
-        // is a scroll away, and the total is the number most people open this
-        // for. Here it is on screen from the start and stays put.
+        // Total sits above the rows, not under them as the web table has it:
+        // on a phone the bottom of a fifteen-row list is a scroll away, and the
+        // total is the number most people open this for.
         _breakdownRow(
           name: 'Total',
           loggedIn: roleLoggedInTotal,
@@ -983,21 +1708,12 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           total: roleTotal,
           isTotalRow: true,
         ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: roleReportDetails.length + 1,
-            itemBuilder: (context, index) {
-              if (index == roleReportDetails.length) {
-                return const SizedBox(height: 80);
-              }
-              final r = roleReportDetails[index];
-              return _breakdownRow(
-                name: r.roleName,
-                loggedIn: r.loggedInCount,
-                notLoggedIn: r.notLoggedInCount,
-                total: r.totalAttendance,
-              );
-            },
+        ...roleReportDetails.map(
+          (r) => _breakdownRow(
+            name: r.roleName,
+            loggedIn: r.loggedInCount,
+            notLoggedIn: r.notLoggedInCount,
+            total: r.totalAttendance,
           ),
         ),
       ],
@@ -1005,15 +1721,39 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   }
 
   /// Shared empty state for both breakdowns, wording taken from the web table.
-  Widget _emptyBreakdown() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          'No attendance found for the selected filters.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-        ),
+  Widget _emptyBreakdown() => _emptyState(
+        icon: Icons.insights_outlined,
+        title: 'Nothing to show',
+        message: 'No attendance found for the selected filters.',
+      );
+
+  /// One look for every "there is nothing here" case on this screen.
+  Widget _emptyState({
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 24),
+      child: Column(
+        children: [
+          Icon(icon, size: 46, color: AppColors.textFaint),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: AppColors.textFaint),
+          ),
+        ],
       ),
     );
   }
@@ -1024,7 +1764,11 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   /// mobile allAttendance endpoint cannot filter by location id on its own.
   Widget _siteBreakdownList() {
     if (isLocationWiseLoading && locationWiseDetails.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(
+            child: CircularProgressIndicator(color: AppColors.primary)),
+      );
     }
     if (locationWiseDetails.isEmpty) {
       return _emptyBreakdown();
@@ -1042,61 +1786,63 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           total: siteTotal,
           isTotalRow: true,
         ),
-        Expanded(
-          child: ListView.builder(
-            // +1: trailing space so the last site clears the bottom.
-            itemCount: locationWiseDetails.length + 1,
-            itemBuilder: (context, index) {
-              if (index == locationWiseDetails.length) {
-                return const SizedBox(height: 80);
-              }
-              final row = locationWiseDetails[index];
-              return _breakdownRow(
-                name: row.location,
-                loggedIn: row.loggedInCount,
-                notLoggedIn: row.notLoggedInCount,
-                total: row.totalCount,
-              );
-            },
+        ...locationWiseDetails.map(
+          (row) => _breakdownRow(
+            name: row.location,
+            loggedIn: row.loggedInCount,
+            notLoggedIn: row.notLoggedInCount,
+            total: row.totalCount,
           ),
         ),
       ],
     );
   }
 
-  /// One of the three view switchers. The active one stays filled so it is
-  /// clear which list is below — with three buttons and no tabs, identical
-  /// buttons would leave the current view ambiguous.
-  Widget _viewButton({
+  /// One of the three view switchers, drawn as a segmented control: with three
+  /// separate buttons it was never obvious which list was on screen.
+  Widget _viewSegment({
     required String label,
     required String view,
-    required Color tone,
     required VoidCallback onSelect,
   }) {
     final bool active = activeView == view;
-    return ElevatedButton(
-      onPressed: () {
-        setState(() => activeView = view);
-        onSelect();
-      },
-      style: ElevatedButton.styleFrom(
-        foregroundColor: active ? Colors.white : tone,
-        backgroundColor: active ? tone : Colors.white,
-        elevation: active ? 2 : 0,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: tone, width: active ? 0 : 1.2),
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (activeView != view) {
+            setState(() => activeView = view);
+            onSelect();
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: active ? AppColors.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: AppColors.shadow,
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+              color: active ? AppColors.primary : AppColors.textSecondary,
+            ),
+          ),
         ),
-        minimumSize: const Size(0, 36),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-            fontSize: 12,
-            fontWeight: active ? FontWeight.bold : FontWeight.w600),
       ),
     );
   }
@@ -1113,7 +1859,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     final TextStyle nameStyle = TextStyle(
       fontSize: isTotalRow ? 14 : 13.5,
       fontWeight: isTotalRow ? FontWeight.bold : FontWeight.w600,
-      color: isTotalRow ? Colors.black87 : Colors.blueGrey.shade800,
+      color: AppColors.textPrimary,
     );
     Widget cell(int v, Color c) => Expanded(
           flex: 2,
@@ -1129,15 +1875,17 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         );
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 10),
+      margin: const EdgeInsets.symmetric(vertical: 3),
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       decoration: BoxDecoration(
-        color: isTotalRow ? AppColors.primary.withOpacity(0.08) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        color: isTotalRow
+            ? AppColors.tint(AppColors.primary, 0.08)
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isTotalRow
               ? AppColors.primary.withOpacity(0.35)
-              : Colors.grey.shade300,
+              : AppColors.divider,
         ),
       ),
       child: Row(
@@ -1147,9 +1895,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             child: Text(name,
                 style: nameStyle, overflow: TextOverflow.ellipsis, maxLines: 2),
           ),
-          cell(loggedIn, Colors.green.shade700),
-          cell(notLoggedIn, Colors.red.shade700),
-          cell(total, Colors.blueGrey.shade700),
+          cell(loggedIn, AppColors.success),
+          cell(notLoggedIn, AppColors.danger),
+          cell(total, AppColors.textSecondary),
         ],
       ),
     );
@@ -1158,27 +1906,21 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   /// Column captions for the breakdown lists — the equivalent of the web
   /// table's <thead>, which a plain list would otherwise leave unlabelled.
   Widget _breakdownHeader(String first) {
+    final TextStyle style = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.bold,
+      letterSpacing: 0.3,
+      color: AppColors.textSecondary,
+    );
     Widget head(String t) => Expanded(
           flex: 2,
-          child: Text(t,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black54)),
+          child: Text(t, textAlign: TextAlign.center, style: style),
         );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 4, 22, 6),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
       child: Row(
         children: [
-          Expanded(
-            flex: 5,
-            child: Text(first,
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black54)),
-          ),
+          Expanded(flex: 5, child: Text(first, style: style)),
           head('Logged In'),
           head('Not Logged'),
           head('Total'),
@@ -1187,12 +1929,425 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Attendance list
+  // ---------------------------------------------------------------------------
+  /// Up to two initials for the avatar plate.
+  String _initials(String name) {
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+
+  /// Blank-ish values arrive from the API as a single space, not as null.
+  String _orDash(String? v) =>
+      (v == null || v.trim().isEmpty) ? '—' : v.trim();
+
+  /// One punch: the icon, the time, the date and where it was scanned.
+  Widget _punchCell({
+    required IconData icon,
+    required Color tone,
+    required String caption,
+    required String? time,
+    required DateTime? date,
+    required String? location,
+  }) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: tone),
+              const SizedBox(width: 4),
+              Text(
+                caption,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            _orDash(time),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          Text(
+            date != null ? DateFormat('d MMM yyyy').format(date) : '—',
+            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Icon(Icons.place_outlined, size: 11, color: AppColors.textFaint),
+              const SizedBox(width: 3),
+              Expanded(
+                child: Text(
+                  _orDash(location),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: AppColors.textFaint),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One person's row in the attendance list.
+  Widget _attendanceCard(AttendanceRecord record) {
+    final bool isIn = record.attendanceStatus == 'Logged In';
+    final Color tone = isIn ? AppColors.success : AppColors.danger;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.tint(tone, 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  _initials(record.userName),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: tone,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      record.userName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (record.commonRefValue.trim().isNotEmpty)
+                      Text(
+                        'Shift · ${record.commonRefValue}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Status pill — a coloured word was easy to miss on a dense list.
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.tint(tone, 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: tone.withOpacity(0.35)),
+                ),
+                child: Text(
+                  record.attendanceStatus,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: tone,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Divider(height: 1, color: AppColors.divider),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _punchCell(
+                icon: Icons.login_rounded,
+                tone: AppColors.success,
+                caption: 'IN',
+                time: record.attendanceInTime,
+                date: record.attendanceInDate,
+                location: record.logInLocationName,
+              ),
+              Container(
+                width: 1,
+                height: 58,
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                color: AppColors.divider,
+              ),
+              _punchCell(
+                icon: Icons.logout_rounded,
+                tone: AppColors.danger,
+                caption: 'OUT',
+                time: record.attendanceOutTime,
+                date: record.attendanceOutDate,
+                location: record.logOutLocationName,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Title above whichever list is on screen.
+  String get _sectionTitle {
+    switch (activeView) {
+      case 'site':
+        return 'SITE WISE ATTENDANCE';
+      case 'role':
+        return 'ROLE WISE ATTENDANCE';
+      default:
+        return selectedStatus.isEmpty
+            ? 'ATTENDANCE LIST'
+            : 'ATTENDANCE LIST · ${selectedStatus.toUpperCase()}';
+    }
+  }
+
+  /// Everything above the list: the filter bar, the summary, the view
+  /// switcher, the two actions and the search box — deliberately short, so the
+  /// first record is on screen without scrolling.
+  Widget _buildHeader(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _filterBar(),
+        const SizedBox(height: 12),
+        _summaryCard(),
+        const SizedBox(height: 12),
+
+        // ---- View switcher ---------------------------------------------------
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: Row(
+            children: [
+              _viewSegment(
+                label: 'Attendance',
+                view: 'attendance',
+                onSelect: () => fetchAttendanceDetails('', ''),
+              ),
+              _viewSegment(
+                label: 'Site Report',
+                view: 'site',
+                onSelect: fetchLocationWiseReport,
+              ),
+              _viewSegment(
+                label: 'Role Report',
+                view: 'role',
+                onSelect: fetchRoleReport,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // ---- Actions ---------------------------------------------------------
+        Row(
+          children: [
+            Expanded(
+              child: _actionButton(
+                icon: Icons.description_outlined,
+                label: 'Generate Report',
+                tone: AppColors.primary,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => GenerateReportScreen(
+                        locations: locations,
+                        selectedStatus: selectedStatus,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _actionButton(
+                icon: Icons.person_off_outlined,
+                label: 'Mark Absent',
+                tone: AppColors.primary,
+                filled: false,
+                onPressed: () async {
+                  // Push (not pushAndRemoveUntil) so this report stays
+                  // underneath and the absent screen keeps its back button.
+                  final marked = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                        builder: (context) => AbsentListScreen()),
+                  );
+                  if (marked == true && mounted) {
+                    await refreshData();
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+
+        // ---- Search ----------------------------------------------------------
+        if (showAttendanceList) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _searchController,
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Search by name…',
+              hintStyle: TextStyle(color: AppColors.textFaint, fontSize: 14),
+              prefixIcon:
+                  Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+              suffixIcon: searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: Icon(Icons.close,
+                          size: 18, color: AppColors.textSecondary),
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                    ),
+              filled: true,
+              fillColor: AppColors.surface,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 13),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: AppColors.divider),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: AppColors.divider),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 1.4),
+              ),
+            ),
+            onChanged: _onSearchChanged,
+          ),
+        ],
+        const SizedBox(height: 14),
+
+        // ---- Section title ---------------------------------------------------
+        // So the list below is labelled the way the web's SITE WISE / ROLE WISE
+        // tables are — three views sharing one area is otherwise ambiguous.
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _sectionTitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            if (activeView == 'attendance' && attendaceReportDetails.isNotEmpty)
+              Text(
+                '${attendaceReportDetails.length} shown',
+                style: TextStyle(fontSize: 11.5, color: AppColors.textFaint),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  /// [filled] false gives the tonal variant — one solid button per row keeps
+  /// the primary action obvious instead of two competing fills.
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required Color tone,
+    required VoidCallback onPressed,
+    bool filled = true,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 17),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+      ),
+      style: ElevatedButton.styleFrom(
+        foregroundColor: filled ? AppColors.onPrimary : tone,
+        backgroundColor: filled ? tone : AppColors.tint(tone, 0.10),
+        elevation: filled ? 1 : 0,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: filled
+              ? BorderSide.none
+              : BorderSide(color: tone.withOpacity(0.35)),
+        ),
+        minimumSize: const Size(0, 42),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    double screenWidth = MediaQuery.of(context).size.width;
-    double screenHeight = MediaQuery.of(context).size.height;
+    final double screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: AppColors.onPrimary,
@@ -1208,866 +2363,78 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             ),
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Attendance Report',
-              style: TextStyle(
-                fontSize: screenWidth > 600 ? 22 : 18,
-                color: Colors.white,
-              ),
-            ),
-          ],
+        title: Text(
+          'Attendance Report',
+          style: TextStyle(
+            fontSize: screenWidth > 600 ? 22 : 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
         ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: RefreshIndicator(
         onRefresh: refreshData,
-        child: Stack(
-          children: [
-            if (isLoading)
-              const Center(child: CircularProgressIndicator())
-            else
-              SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 30, 10, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 8,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: ExpansionTile(
-                          title: const Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              // Icon(
-                              //   Icons.filter_alt, // Use any filter icon you prefer
-                              //   size: 20,
-                              //   color: Colors.grey, // Adjust color to your preference
-                              // ),
-                              Text(
-                                "Filters",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          //leading: Icon(Icons.info), // Custom leading icon
-                          trailing: const Icon(
-                            Icons.filter_alt,
-                            color: Colors.grey,
-                          ),
-                          children: [
-                            const SizedBox(height: 10),
-                            CustomDateRangePicker(
-                              onDateRangeSelected: _onDateRangeSelected,
-                              selectedDateRange: selectedDateRange,
-                            ),
-                            const SizedBox(height: 15),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                // Location Dropdown
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal:
-                                            12.0), // Adjust the horizontal padding as needed
-                                    child: DropdownButtonFormField2<String>(
-                                      decoration: InputDecoration(
-                                        labelText: 'Location',
-                                        labelStyle: TextStyle(
-                                          color: Colors.grey[700],
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        prefixIcon: Icon(
-                                          Icons.location_on,
-                                          color: AppColors.primary,
-                                        ),
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          vertical: 12.0,
-                                          horizontal: 12.0,
-                                        ),
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12.0),
-                                          borderSide: BorderSide(
-                                              color: Colors.grey.shade300),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color:
-                                                Color.fromRGBO(8, 101, 145, 1),
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(12.0),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: AppColors.primary,
-                                            width: 2.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(12.0),
-                                        ),
-                                      ),
-                                      alignment:
-                                          AlignmentDirectional.bottomStart,
-                                      value: selectedLocation != '0'
-                                          ? selectedLocation
-                                          : '0',
-                                      items: [
-                                        DropdownMenuItem<String>(
-                                          value: '0',
-                                          child: Text('All',
-                                              style: TextStyle(
-                                                  color: Colors.black87)),
-                                        ),
-                                        ...locations.map((location) {
-                                          return DropdownMenuItem<String>(
-                                            value: location.id.toString(),
-                                            child: Text(
-                                              location.location,
-                                              style: TextStyle(
-                                                  color: Colors.black87),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      ],
-                                      onChanged: (value) {
-                                        setState(() {
-                                          selectedLocation = value!;
-                                        });
-                                        // Refreshes all three views — the role
-                                        // and site breakdowns are started
-                                        // inside, so calling either again here
-                                        // would only duplicate the request.
-                                        fetchAttendanceDashboard();
-                                        fetchAttendanceDetails(
-                                            selectedStatus, '');
-                                        // The role list is scoped to location.
-                                        fetchRoles();
-                                      },
-                                      isExpanded: true,
-                                      dropdownStyleData: DropdownStyleData(
-                                        maxHeight: 250,
-                                        width:
-                                            MediaQuery.of(context).size.width *
-                                                0.9,
-                                        decoration: BoxDecoration(
-                                          borderRadius:
-                                              BorderRadius.circular(12.0),
-                                          color: Colors.white,
-                                          boxShadow: const [
-                                            BoxShadow(
-                                              color: Colors.black12,
-                                              blurRadius: 8,
-                                              offset: Offset(0, 4),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            // Role filter, matching the web dashboard's
-                            // Role dropdown. Only the location and role
-                            // filters narrow the two breakdowns, so both live
-                            // here together.
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12.0),
-                              child: DropdownButtonFormField2<String>(
-                                decoration: InputDecoration(
-                                  labelText: 'Role',
-                                  labelStyle: TextStyle(
-                                    color: Colors.grey[700],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  prefixIcon: const Icon(
-                                    Icons.badge_outlined,
-                                    color: AppColors.primary,
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 12.0,
-                                    horizontal: 12.0,
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade300),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: const BorderSide(
-                                      color: Color.fromRGBO(8, 101, 145, 1),
-                                      width: 1.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: const BorderSide(
-                                      color: AppColors.primary,
-                                      width: 2.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                ),
-                                alignment: AlignmentDirectional.bottomStart,
-                                isExpanded: true,
-                                // Never hand the dropdown a value it has no
-                                // item for: that assertion is raised during
-                                // build, so it takes the whole screen with it
-                                // rather than just the dropdown.
-                                value: _selectableRoles.any((r) =>
-                                        r.roleId.toString() == selectedRole)
-                                    ? selectedRole
-                                    : '0',
-                                items: [
-                                  const DropdownMenuItem<String>(
-                                    value: '0',
-                                    child: Text('All',
-                                        style:
-                                            TextStyle(color: Colors.black87)),
-                                  ),
-                                  ..._selectableRoles
-                                      .map((role) => DropdownMenuItem<String>(
-                                            value: role.roleId.toString(),
-                                            child: Text(
-                                              role.roleName,
-                                              style: const TextStyle(
-                                                  color: Colors.black87),
-                                            ),
-                                          )),
-                                ],
-                                onChanged: (value) {
-                                  setState(() => selectedRole = value ?? '0');
-                                  fetchAttendanceDashboard();
-                                  fetchAttendanceDetails(selectedStatus, '');
-                                },
-                                dropdownStyleData: DropdownStyleData(
-                                  maxHeight: 250,
-                                  width:
-                                      MediaQuery.of(context).size.width * 0.9,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    color: Colors.white,
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Colors.black12,
-                                        blurRadius: 8,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              margin: const EdgeInsets.symmetric(vertical: 5),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.teal.shade100),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black12.withOpacity(0.05),
-                                    spreadRadius: 2,
-                                    blurRadius: 8,
-                                    offset: Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  // Buttons to select all "Morning" or "Night" shifts based on partial key match
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceEvenly,
-                                    children: [
-                                      Expanded(
-                                        child: TextButton(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 4),
-                                            minimumSize: const Size(0, 40),
-                                            tapTargetSize: MaterialTapTargetSize
-                                                .shrinkWrap,
-                                          ),
-                                          onPressed: () {
-                                            setState(() {
-                                              // Select all shifts that contain "Night" in their commonRefKey
-                                              selectedShifts = shifts
-                                                  .where((shift) => shift
-                                                      .commonRefKey
-                                                      .contains('All'))
-                                                  .toList();
-                                              selectedShiftIds = selectedShifts
-                                                  .map((shift) => shift.id)
-                                                  .toList();
-                                            });
-                                            fetchAttendanceDashboard();
-                                          },
-                                          child: Text(
-                                            "All Shifts",
-                                            textAlign: TextAlign.center,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: AppColors.primary,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: TextButton(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 4),
-                                            minimumSize: const Size(0, 40),
-                                            tapTargetSize: MaterialTapTargetSize
-                                                .shrinkWrap,
-                                          ),
-                                          onPressed: () {
-                                            setState(() {
-                                              // Select all shifts that contain "Morning" in their commonRefKey
-                                              selectedShifts = shifts
-                                                  .where((shift) => shift
-                                                      .commonRefKey
-                                                      .contains('Morning'))
-                                                  .toList();
-                                              selectedShiftIds = selectedShifts
-                                                  .map((shift) => shift.id)
-                                                  .toList();
-                                            });
-                                            fetchAttendanceDashboard();
-                                          },
-                                          child: Text(
-                                            "Morning Shifts",
-                                            textAlign: TextAlign.center,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: AppColors.primary,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: TextButton(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 4),
-                                            minimumSize: const Size(0, 40),
-                                            tapTargetSize: MaterialTapTargetSize
-                                                .shrinkWrap,
-                                          ),
-                                          onPressed: () {
-                                            setState(() {
-                                              // Select all shifts that contain "Night" in their commonRefKey
-                                              selectedShifts = shifts
-                                                  .where((shift) => shift
-                                                      .commonRefKey
-                                                      .contains('Night'))
-                                                  .toList();
-                                              selectedShiftIds = selectedShifts
-                                                  .map((shift) => shift.id)
-                                                  .toList();
-                                            });
-                                            fetchAttendanceDashboard();
-                                          },
-                                          child: const Text(
-                                            "Night Shifts",
-                                            textAlign: TextAlign.center,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: AppColors.primary,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  MultiSelectDialogField<ShiftTiming>(
-                                    items: shifts
-                                        .map((shift) =>
-                                            MultiSelectItem<ShiftTiming>(
-                                              shift,
-                                              '${shift.commonRefKey} - ${shift.commonRefValue}',
-                                            ))
-                                        .toList(),
-                                    initialValue: selectedShifts,
-                                    title: const Text(
-                                      "Select Shifts",
-                                      style: TextStyle(fontSize: 14),
-                                    ),
-                                    selectedColor: AppColors.primary,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      color: Colors.white,
-                                      border:
-                                          Border.all(color: AppColors.primary),
-                                    ),
-                                    buttonIcon: const Icon(
-                                      Icons.access_time,
-                                      color: AppColors.primary,
-                                    ),
-                                    buttonText: Text(
-                                      "Select Shifts",
-                                      style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    dialogWidth:
-                                        MediaQuery.of(context).size.width *
-                                            0.75,
-                                    itemsTextStyle:
-                                        const TextStyle(fontSize: 12),
-                                    checkColor: AppColors.primary,
-                                    dialogHeight:
-                                        MediaQuery.of(context).size.height *
-                                            0.5,
-                                    onConfirm: (values) {
-                                      setState(() {
-                                        selectedShifts = values;
-                                        selectedShiftIds = values
-                                            .map((shift) => shift.id)
-                                            .toList();
-                                      });
-                                      fetchAttendanceDashboard();
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                      // Two headline counts, as the web dashboard has them.
-                      // The old third card, "Client Meeting", was removed: this
-                      // screen's endpoint pins attendance_status to exactly
-                      // "Logged In" or "Not Logged In", so that card could only
-                      // ever read 0 and its tap only ever opened an empty list.
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _kpiCard(
-                                label: 'Logged In',
-                                count: _countFor('Logged In'),
-                                icon: Icons.login,
-                                tone: Colors.green,
-                                onTap: () {
-                                  setState(() {
-                                    activeView = 'attendance';
-                                    selectedStatus = 'Logged In';
-                                  });
-                                  fetchAttendanceDetails(selectedStatus, '');
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _kpiCard(
-                                label: 'Not Logged In',
-                                count: _countFor('Not Logged In'),
-                                icon: Icons.block,
-                                tone: Colors.red,
-                                onTap: () {
-                                  setState(() {
-                                    activeView = 'attendance';
-                                    selectedStatus = 'Not Logged In';
-                                  });
-                                  fetchAttendanceDetails(selectedStatus, '');
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 15),
-                      Column(
-                        children: [
-                          // First Row - Buttons
-                          // ...existing code...
-                          // Two rows: the first switches which breakdown is
-                          // on screen, the second runs an action. Five buttons
-                          // on one row left no room for their labels.
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0, vertical: 6.0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _viewButton(
-                                    label: 'Attendance',
-                                    view: 'attendance',
-                                    tone: Colors.blue,
-                                    onSelect: () =>
-                                        fetchAttendanceDetails('', ''),
-                                  ),
-                                ),
-                                const SizedBox(width: 8.0),
-                                Expanded(
-                                  child: _viewButton(
-                                    label: 'Site Report',
-                                    view: 'site',
-                                    tone: AppColors.primary,
-                                    onSelect: fetchLocationWiseReport,
-                                  ),
-                                ),
-                                const SizedBox(width: 8.0),
-                                Expanded(
-                                  child: _viewButton(
-                                    label: 'Role Report',
-                                    view: 'role',
-                                    tone: Colors.green,
-                                    onSelect: fetchRoleReport,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0, vertical: 2.0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              GenerateReportScreen(
-                                            locations: locations,
-                                            selectedStatus: selectedStatus,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 8),
-                                      backgroundColor: Colors.orange,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      minimumSize: const Size(0, 36),
-                                    ),
-                                    child: const Text('Generate Report',
-                                        style: TextStyle(fontSize: 12)),
-                                  ),
-                                ),
-                                const SizedBox(width: 8.0),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.of(context).pushAndRemoveUntil(
-                                        MaterialPageRoute(
-                                            builder: (context) =>
-                                                AbsentListScreen()),
-                                        (route) => false,
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 8),
-                                      backgroundColor: Colors.deepPurple,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      minimumSize: const Size(0, 36),
-                                    ),
-                                    child: const Text('Mark Absent',
-                                        style: TextStyle(fontSize: 12)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-// ...existing code...
-
-                          // Second Row - Search Input
-                          if (showAttendanceList)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0, vertical: 8.0),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      decoration: InputDecoration(
-                                        hintText: 'Search by name...',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          borderSide: BorderSide(
-                                              color: Colors.grey.shade400),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          borderSide: BorderSide(
-                                              color: Colors.blue, width: 2),
-                                        ),
-                                        contentPadding: EdgeInsets.symmetric(
-                                            vertical: 12, horizontal: 16),
-                                      ),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          searchQuery = value;
-                                        });
-                                        if (searchQuery.length >= 3 ||
-                                            searchQuery.isEmpty) {
-                                          fetchAttendanceDetails(
-                                              selectedStatus, searchQuery);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(
-                          height:
-                              16.0), // Space between the search row and the list
-                      // Flexible ListView to adapt to available space
-
-                      // Section title, so the list below is labelled the way the
-                      // web's SITE WISE / ROLE WISE tables are — three views
-                      // sharing one area is otherwise ambiguous.
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 4, 18, 0),
-                        child: Text(
-                          activeView == 'site'
-                              ? 'SITE WISE ATTENDANCE'
-                              : activeView == 'role'
-                                  ? 'ROLE WISE ATTENDANCE'
-                                  : selectedStatus.isEmpty
-                                      ? 'ATTENDANCE LIST'
-                                      : 'ATTENDANCE LIST · '
-                                          '${selectedStatus.toUpperCase()}',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.4,
-                            color: Colors.blueGrey.shade700,
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Container(
-                          height: screenHeight - 400, // Adjust height as needed
-                          child: activeView == 'site'
-                              ? _siteBreakdownList()
-                              : showAttendanceList
-                                  ? ListView.builder(
-                                      controller: _scrollController,
-                                      itemCount: attendaceReportDetails.length +
-                                          1, // Increase count for padding
-                                      itemBuilder: (context, index) {
-                                        if (index ==
-                                            attendaceReportDetails.length) {
-                                          // Add extra space at the end of the list
-                                          return const SizedBox(
-                                              height:
-                                                  80); // Adjust height as needed
-                                        }
-
-                                        final record =
-                                            attendaceReportDetails[index];
-                                        return Card(
-                                          margin: const EdgeInsets.symmetric(
-                                              vertical: 4.0, horizontal: 10.0),
-                                          elevation: 2,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                                horizontal: 10.0),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                // User and Status Row
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    Flexible(
-                                                      child: Text(
-                                                        record.userName,
-                                                        style: const TextStyle(
-                                                          fontSize: 14,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Colors.black87,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Text(
-                                                      record.attendanceStatus,
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color:
-                                                            record.attendanceStatus ==
-                                                                    "Logged In"
-                                                                ? Colors.green
-                                                                : const Color
-                                                                    .fromARGB(
-                                                                    255,
-                                                                    241,
-                                                                    58,
-                                                                    58),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                // In and Out Times Row
-                                                Row(
-                                                  children: [
-                                                    Icon(Icons.login,
-                                                        color:
-                                                            Colors.blueAccent,
-                                                        size: 14),
-                                                    const SizedBox(width: 4),
-                                                    Flexible(
-                                                      child: Text(
-                                                        'In: ${record.attendanceInTime} - ${record.logInLocationName}',
-                                                        style: const TextStyle(
-                                                            fontSize: 12,
-                                                            color:
-                                                                Colors.black54),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Row(
-                                                  children: [
-                                                    Icon(Icons.logout,
-                                                        color: Colors.redAccent,
-                                                        size: 14),
-                                                    const SizedBox(width: 4),
-                                                    Flexible(
-                                                      child: Text(
-                                                        'Out: ${record.attendanceOutTime} - ${record.logOutLocationName}',
-                                                        style: const TextStyle(
-                                                            fontSize: 12,
-                                                            color:
-                                                                Colors.black54),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                // In and Out Dates Row
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    Text(
-                                                      'In Date: ${record.attendanceInDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceInDate!) : "--"}',
-                                                      style: const TextStyle(
-                                                          fontSize: 11,
-                                                          color:
-                                                              Colors.black54),
-                                                    ),
-                                                    Text(
-                                                      'Out Date: ${record.attendanceOutDate != null ? DateFormat('yyyy-MM-dd').format(record.attendanceOutDate!) : "--"}',
-                                                      style: const TextStyle(
-                                                          fontSize: 11,
-                                                          color:
-                                                              Colors.black54),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                // Add shift time display
-                                                Text(
-                                                  'Shift Time: ${record.commonRefValue}',
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Color.fromARGB(
-                                                        136, 2, 2, 2),
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    )
-                                  : _roleBreakdownList(),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                    ],
+        color: AppColors.primary,
+        // One scroll view for the whole screen. The list used to sit in a box
+        // of `screenHeight - 400` inside another scroll view, which left a
+        // second scrollbar in the middle of the page and cut the last rows off
+        // on short screens.
+        child: isLoading
+            ? ListView(
+                children: const [
+                  SizedBox(height: 160),
+                  Center(
+                      child:
+                          CircularProgressIndicator(color: AppColors.primary)),
+                ],
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+                    sliver: SliverToBoxAdapter(child: _buildHeader(context)),
                   ),
-                ),
+                  if (activeView == 'attendance')
+                    if (attendaceReportDetails.isEmpty)
+                      SliverToBoxAdapter(
+                        child: _emptyState(
+                          icon: Icons.people_outline,
+                          title: 'No attendance records',
+                          message: searchQuery.isNotEmpty
+                              ? 'No one matches “$searchQuery”.'
+                              : 'Nothing was recorded for the selected '
+                                  'filters.',
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) => _attendanceCard(
+                                attendaceReportDetails[index]),
+                            childCount: attendaceReportDetails.length,
+                          ),
+                        ),
+                      )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      sliver: SliverToBoxAdapter(
+                        child: activeView == 'site'
+                            ? _siteBreakdownList()
+                            : _roleBreakdownList(),
+                      ),
+                    ),
+                  SliverToBoxAdapter(
+                    child: SizedBox(height: 28 + bottomBarInset(context)),
+                  ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }

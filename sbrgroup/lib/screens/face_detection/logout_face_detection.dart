@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:ajna/screens/api_endpoints.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:ajna/screens/face_detection/embedding_service.dart';
 import 'package:ajna/screens/face_detection/shift_timings_model.dart';
 import 'package:ajna/screens/util.dart';
@@ -45,15 +44,17 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   List<Map<String, dynamic>> _shifts = [];
   int? _selectedShiftId;
 
-  /// Whether the guard has accepted the shift and moved on to the camera.
-  ///
-  /// Separate from [_selectedShiftId] because that now arrives pre-filled from
-  /// the current time — without this the camera would open before the guard
-  /// ever saw which shift was picked.
-  bool _shiftConfirmed = false;
+  /// Label of the resolved shift, for the read-only line on screen.
+  String get _selectedShiftName {
+    for (final shift in _shifts) {
+      if (shift['id'] == _selectedShiftId) {
+        final label = (shift['refValue'] ?? '').toString().trim();
+        if (label.isNotEmpty) return label;
+      }
+    }
+    return '';
+  }
 
-  /// True when [_selectedShiftId] was chosen from the clock rather than tapped.
-  bool _shiftPickedByTime = false;
   int? _organizationId;
 
   int? _selectedLocationId;
@@ -84,6 +85,11 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
       _cameraInitFuture = _cameraController!.initialize().then((_) {
         if (!mounted) return;
         setState(() {});
+        // Without the shift screen in front of it the camera is often still
+        // opening when the guard taps, and the countdown was only ever armed
+        // from that tap. Arm it here too, so a slow camera does not leave them
+        // staring at a preview that never fires.
+        _armCapture();
       });
     } catch (e) {
       print('Error initializing camera: $e');
@@ -138,11 +144,11 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
           final suggested = shiftIdForLogout(_shifts, DateTime.now());
           if (suggested != null) {
             _selectedShiftId = suggested;
-            _shiftPickedByTime = true;
           }
 
           _isLoading = false; // Stop loading
         });
+        _armCapture();
       }
     } catch (error) {
       setState(() {
@@ -218,10 +224,12 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
       );
       return position;
     } catch (e) {
-      print('Error fetching location: $e');
+      debugPrint('Error fetching location: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error fetching location')),
+          const SnackBar(
+              content: Text('Could not check your location. Please try '
+                  'again.')),
         );
       }
       throw 'Error fetching location';
@@ -263,8 +271,17 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   }
 
   Future<void> _takePictureAndSendToAPI() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized)
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
+    }
+    // The shift is resolved from the clock and never picked by hand, so this is
+    // the one place it can be missing. Sending without it would record the punch
+    // against no shift, which the backend then cannot match on logout.
+    if (_selectedShiftId == null) {
+      await _showResponseDialog(
+          'Shift could not be identified. Please try again.', false);
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -279,18 +296,24 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     } catch (e) {
       print("Error taking picture: $e");
     } finally {
-      await Future.delayed(Duration(seconds: 2));
-      setState(() {
-        _isLoading = false;
-        _isProcessingAPI = false;
-      });
+      await Future.delayed(const Duration(seconds: 2));
+      // The result dialog pops this screen, so by the time we get here the
+      // widget is usually gone.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isProcessingAPI = false;
+        });
+      }
     }
   }
 
   Future<void> _generateEmbedding(File imageFile) async {
     if (!_faceEmbeddingService.isReady) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Model not loaded yet.")),
+        const SnackBar(
+            content: Text('Still getting ready — please try again in a '
+                'moment.')),
       );
       return;
     }
@@ -308,13 +331,16 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
 
       if (_generatedEmbeddings.every((e) => e == 0.0)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('⚠️ Embedding is all zeros!')),
+          const SnackBar(
+              content: Text('Face not captured clearly. Please try again in '
+                  'better light.')),
         );
       }
     } catch (e) {
-      print('Error during embedding: $e');
+      debugPrint('Error during embedding: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Failed to generate embedding.')),
+        const SnackBar(
+            content: Text('Could not read your face. Please try again.')),
       );
     }
   }
@@ -322,6 +348,12 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
   Future<void> _sendAttendanceToAPI(File imageFile,
       {required bool isLogin}) async {
     try {
+      // Logged so the shift actually sent can be confirmed against the
+      // backend's response, rather than inferred from the app bar.
+      debugPrint('Face capture -> shiftId=$_selectedShiftId '
+          'isLogin=$isLogin locationId=$_selectedLocationId '
+          'organizationId=$_organizationId');
+
       final response = await ApiService.submitCaptureFace(
         imageFile: imageFile,
         // embeddings: _generatedEmbeddings,
@@ -399,20 +431,19 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
       ),
     );
 
+    // Nothing else should fire while the result is on screen.
+    _countdownTimer?.cancel();
+
     await Future.delayed(const Duration(seconds: 6));
+    if (!mounted) return;
 
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context);
+    // Close the result dialog, then leave the capture screen. One punch per
+    // visit: the guard reads the outcome and lands back on the dashboard,
+    // rather than the camera re-arming and photographing whoever is next.
+    Navigator.of(context, rootNavigator: true).pop();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
     }
-
-    // Back to the shift screen for the next guard, with the shift for the
-    // current time filled in again rather than blank.
-    setState(() {
-      _shiftConfirmed = false;
-      final suggested = shiftIdForLogout(_shifts, DateTime.now());
-      _selectedShiftId = suggested;
-      _shiftPickedByTime = suggested != null;
-    });
   }
 
   Future<void> _toggleCamera() async {
@@ -496,8 +527,12 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
             ),
           ),
         ),
+        // The shift lives here rather than on a panel in front of the camera:
+        // it is decided by the clock, not by the guard, so it is a label to
+        // read, not a step to complete.
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               'Out Face Capture',
@@ -506,34 +541,53 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
                 color: Colors.white,
               ),
             ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.schedule, color: Colors.white, size: 13),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    _selectedShiftName.isEmpty
+                        ? 'Shift not identified'
+                        : _selectedShiftName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: (!_shiftConfirmed)
-          ? Column(
-              children: [
-                _buildShiftDropdown(),
-              ],
-            )
-          : Stack(
-              children: [
-                _buildCameraPreview(),
-                if (_isCountingDown) _buildCountdownOverlay(width, height),
-                if (_isLoading) _buildLoadingOverlay(loadingFontSize),
-                Positioned(
-                  top: 40,
-                  right: 20,
-                  child: IconButton(
-                    icon: Icon(Icons.switch_camera,
-                        color: Colors.white, size: 32),
-                    onPressed: _toggleCamera,
-                    tooltip: 'Switch Camera',
-                  ),
-                ),
-              ],
+      body: Stack(
+        children: [
+          _buildCameraPreview(),
+          if (_isCountingDown) _buildCountdownOverlay(width, height),
+          if (_isLoading) _buildLoadingOverlay(loadingFontSize),
+          // Capturing without a shift would file the punch against
+          // nothing, which the backend cannot match on logout, so the
+          // camera is covered until the shift list loads.
+          if (_selectedShiftId == null && !_isLoading)
+            _buildShiftUnavailableOverlay(),
+          Positioned(
+            top: 40,
+            right: 20,
+            child: IconButton(
+              icon: Icon(Icons.switch_camera, color: Colors.white, size: 32),
+              onPressed: _toggleCamera,
+              tooltip: 'Switch Camera',
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -632,123 +686,64 @@ class _AttendanceScreenState extends State<LogOutFaceAttendanceScreen> {
     );
   }
 
-  Widget _buildShiftDropdown() {
-    final bool canContinue = _selectedShiftId != null;
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.3),
-                  spreadRadius: 2,
-                  blurRadius: 5,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: DropdownButtonFormField2<int>(
-              decoration: InputDecoration(
-                labelText: 'Select Shift',
-                prefixIcon: Icon(Icons.schedule,
-                    color: Color.fromARGB(255, 41, 221, 200)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(
-                      color: Color.fromARGB(255, 41, 221, 200), width: 1.0),
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(
-                      color: Color.fromARGB(255, 23, 158, 142), width: 2.0),
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-              ),
-              value: _selectedShiftId,
-              items: _shifts.map((shift) {
-                return DropdownMenuItem<int>(
-                  value: shift['id'],
-                  child: Text(
-                    shift['refValue'] ?? 'Unknown Shift',
-                    style: TextStyle(
-                      fontSize:
-                          MediaQuery.of(context).size.width > 500 ? 18 : 16,
-                      color: Color.fromARGB(255, 80, 79, 79),
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                // Only records the choice — the camera starts from Continue, so a
-                // mis-tap can still be corrected.
-                setState(() {
-                  _selectedShiftId = value;
-                  _shiftPickedByTime = false;
-                });
-              },
-              validator: (value) {
-                if (value == null) {
-                  return 'Please select a shift';
-                }
-                return null;
-              },
-              isExpanded: true,
-              dropdownStyleData: DropdownStyleData(
-                maxHeight: 300,
-                width: MediaQuery.of(context).size.width - 32,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _shiftPickedByTime
-                ? 'This should be the shift you are finishing. Change it if you '
-                    'worked a different shift.'
-                : 'Select the shift you are finishing, then continue.',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: canContinue ? _confirmShift : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text(
-              'Continue',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
+  /// Starts the capture countdown when everything it needs is ready.
+  ///
+  /// Called from three places because any of them can be the last to finish:
+  /// the camera opening, the shift list arriving, and the previous guard's
+  /// result dialog closing. Guarded so it can never stack two countdowns.
+  void _armCapture() {
+    if (!mounted) return;
+    if (_selectedShiftId == null) return;
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+    if (_isCountingDown || _isLoading || _isProcessingAPI) return;
+    _startCountdown();
   }
 
-  /// Accepts the shift and moves on to the camera.
-  void _confirmShift() {
-    if (_selectedShiftId == null) return;
-    setState(() {
-      _shiftConfirmed = true;
-    });
-    if (_cameraController != null && _cameraController!.value.isInitialized) {
-      _startCountdown();
-    }
+  /// Covers the camera while the shift is unknown, rather than capturing a
+  /// punch that cannot be filed.
+  Widget _buildShiftUnavailableOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.75),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.schedule_outlined,
+                  size: 46, color: Colors.white70),
+              const SizedBox(height: 14),
+              const Text(
+                'Shift could not be identified',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'The shift list did not load, so attendance cannot be recorded. '
+                'Check your connection and try again.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: fetchShiftData,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Retry'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -284,7 +284,11 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
   int? _locationId;
   int _shiftId = 0;
   int _statusId = 0;
-  DateTime _attendanceDate = DateTime.now();
+  /// The sheet is a range, not a day — the backend filters on a start and an
+  /// end, and the web sheet opens on today..today. Both the same day is the
+  /// single-day sheet; widening the end covers a week without six reloads.
+  DateTime _startDate = DateTime.now();
+  DateTime _endDate = DateTime.now();
   String _search = '';
 
   List<ManualAttendanceRecord> _rows = [];
@@ -420,7 +424,8 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
     }
   }
 
-  String get _formattedDate => DateFormat('yyyy-MM-dd').format(_attendanceDate);
+  String get _formattedStart => DateFormat('yyyy-MM-dd').format(_startDate);
+  String get _formattedEnd => DateFormat('yyyy-MM-dd').format(_endDate);
 
   // ------------------------------------------------------------------ sheet
 
@@ -440,7 +445,8 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
         page: _page,
         size: _pageSize,
         locationId: _locationId!,
-        attendanceDate: _formattedDate,
+        startDate: _formattedStart,
+        endDate: _formattedEnd,
         shiftId: _shiftId,
         statusId: _statusId,
         userName: _search,
@@ -508,7 +514,8 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
     try {
       final response = await ApiService.getManualAttendanceCount(
         locationId: _locationId!,
-        attendanceDate: _formattedDate,
+        startDate: _formattedStart,
+        endDate: _formattedEnd,
         shiftId: _shiftId,
       );
       if (response.statusCode == 200) {
@@ -919,9 +926,14 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '${row.employeeNumber.isEmpty ? row.userName : '${row.employeeNumber} · ${row.userName}'}'
-                  '\n${row.locationName}'
-                  '${row.attendanceInTime == null ? '' : ' · In ${row.attendanceInTime}'}',
+                  [
+                    if (row.employeeNumber.isNotEmpty) row.employeeNumber,
+                    row.userName,
+                    if (row.locationName.isNotEmpty) row.locationName,
+                    if (row.shiftName.isNotEmpty) row.shiftName,
+                    if (row.attendanceInTime != null)
+                      'In ${row.attendanceInTime}',
+                  ].join(' · '),
                   style:
                       TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),
@@ -1008,12 +1020,16 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
     return result;
   }
 
-  Future<void> _pickDate() async {
+  /// The two ends clamp each other rather than being validated after the fact:
+  /// the start picker cannot go past the end and the end picker cannot go
+  /// before the start, so an inverted range is never offered in the first place.
+  Future<void> _pickDate({required bool isStart}) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _attendanceDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDate: isStart ? _startDate : _endDate,
+      firstDate: isStart ? DateTime(2020) : _startDate,
+      lastDate:
+          isStart ? _endDate : DateTime.now().add(const Duration(days: 1)),
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: ColorScheme.light(
@@ -1025,10 +1041,15 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
         child: child!,
       ),
     );
-    if (picked != null) {
-      setState(() => _attendanceDate = picked);
-      _reload();
-    }
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+      } else {
+        _endDate = picked;
+      }
+    });
+    _reload();
   }
 
   // ------------------------------------------------------------------- view
@@ -1095,7 +1116,7 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
                 ),
               ),
             ),
-            if (_changeCount > 0) _footer(),
+            if (_locationId != null) _footer(),
           ],
         ),
       ),
@@ -1232,52 +1253,35 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
               },
             ),
             const SizedBox(height: 12),
+            DropdownButtonFormField2<int>(
+              isExpanded: true,
+              value: _shiftId,
+              decoration: _fieldDecoration('Shift'),
+              dropdownStyleData: _menuStyle(context, maxHeight: 280),
+              menuItemStyleData: _menuItemStyle,
+              items: [
+                const DropdownMenuItem<int>(value: 0, child: Text('All shifts')),
+                ..._shifts.map((s) => DropdownMenuItem<int>(
+                      value: s.id,
+                      child: Text(s.name, overflow: TextOverflow.ellipsis),
+                    )),
+              ],
+              onChanged: (value) {
+                setState(() => _shiftId = value ?? 0);
+                _reload();
+              },
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField2<int>(
-                    isExpanded: true,
-                    value: _shiftId,
-                    decoration: _fieldDecoration('Shift'),
-                    dropdownStyleData: _menuStyle(context, maxHeight: 280),
-                    menuItemStyleData: _menuItemStyle,
-                    items: [
-                      const DropdownMenuItem<int>(
-                          value: 0, child: Text('All shifts')),
-                      ..._shifts.map((s) => DropdownMenuItem<int>(
-                            value: s.id,
-                            child:
-                                Text(s.name, overflow: TextOverflow.ellipsis),
-                          )),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _shiftId = value ?? 0);
-                      _reload();
-                    },
-                  ),
+                  child: _dateField('Start Date', _startDate,
+                      () => _pickDate(isStart: true)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: InkWell(
-                    onTap: _pickDate,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InputDecorator(
-                      decoration: _fieldDecoration('Date'),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              DateFormat('dd MMM yyyy').format(_attendanceDate),
-                              style: TextStyle(color: AppColors.textPrimary),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const Icon(Icons.calendar_today,
-                              size: 16, color: AppColors.primary),
-                        ],
-                      ),
-                    ),
-                  ),
+                  child: _dateField(
+                      'End Date', _endDate, () => _pickDate(isStart: false)),
                 ),
               ],
             ),
@@ -1354,7 +1358,7 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
             .location;
     final parts = <String>[
       site,
-      DateFormat('dd MMM yyyy').format(_attendanceDate),
+      _dateSummary,
       if (_shiftId != 0)
         _shifts
             .firstWhere((s) => s.id == _shiftId,
@@ -1368,6 +1372,37 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
       if (_search.isNotEmpty) _search,
     ];
     return parts.join(' · ');
+  }
+
+  /// One end of the range, read as a field rather than a button so the two
+  /// sit level with the Shift dropdown above them.
+  Widget _dateField(String label, DateTime value, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: InputDecorator(
+        decoration: _fieldDecoration(label),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                DateFormat('dd MMM yyyy').format(value),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Icon(Icons.calendar_today, size: 16, color: AppColors.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A range of one day reads as that day, not as "x – x".
+  String get _dateSummary {
+    final start = DateFormat('dd MMM yyyy').format(_startDate);
+    if (DateUtils.isSameDay(_startDate, _endDate)) return start;
+    return '$start – ${DateFormat('dd MMM yyyy').format(_endDate)}';
   }
 
   /// How every dropdown on this screen opens its menu.
@@ -1491,7 +1526,7 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
       _countChip('Logged In', _counts.loggedIn, AppColors.primary),
       _countChip('Pending', _counts.pending, AppColors.warning),
       _countChip('Verified', _counts.verified, AppColors.success),
-      _countChip('Removed', _counts.removed, AppColors.danger),
+      _countChip('Removed', _counts.removed, AppColors.textSecondary),
       _countChip('Moved Out', _counts.movedOut, AppColors.info),
     ];
     return SingleChildScrollView(
@@ -1554,6 +1589,15 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
   Widget _card(ManualAttendanceRecord row) {
     final accent = _statusColor(row.recordStatusKey);
     final actions = _actionsFor(row);
+    // Struck off the sheet, exactly as the web row reads — the name carries the
+    // line and the rest of the card fades, so a removed punch is recognised
+    // before it is read. The notes underneath stay plain: who removed it and
+    // why is the part still worth reading.
+    final removed = row.recordStatusKey == 'REMOVED';
+    // A moved punch is intact, it just belongs to another site's sheet now, so
+    // it is muted rather than struck.
+    final moved =
+        row.recordStatusKey == 'MOVED' || row.recordStatusKey == 'MOVED_OUT';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1601,9 +1645,18 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
                             child: Text(
                               row.userName,
                               style: TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700),
+                                color: removed
+                                    ? AppColors.textFaint
+                                    : moved
+                                        ? AppColors.textSecondary
+                                        : AppColors.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                decoration: removed
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                decorationColor: AppColors.textFaint,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -1618,7 +1671,10 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
                           if (row.shiftName.isNotEmpty) row.shiftName,
                         ].join(' · '),
                         style: TextStyle(
-                            color: AppColors.textSecondary, fontSize: 12),
+                            color: removed
+                                ? AppColors.textFaint
+                                : AppColors.textSecondary,
+                            fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 6),
@@ -1751,12 +1807,17 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
     );
   }
 
+  /// The web sheet's four states, in its colours.
+  ///
+  /// Removed is grey, not red: the punch was struck off the sheet by a
+  /// supervisor who meant to, which is a decision rather than a fault, and a
+  /// page of red down the left edge reads as a page of errors.
   Color _statusColor(String key) {
     switch (key) {
       case 'VERIFIED':
         return AppColors.success;
       case 'REMOVED':
-        return AppColors.danger;
+        return AppColors.textSecondary;
       case 'MOVED':
       case 'MOVED_OUT':
         return AppColors.info;
@@ -1821,7 +1882,8 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: _saving ? null : _resetSelection,
+              onPressed:
+                  _saving || _changeCount == 0 ? null : _resetSelection,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.textSecondary,
                 side: BorderSide(color: AppColors.divider),
@@ -1834,10 +1896,12 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
           Expanded(
             flex: 2,
             child: ElevatedButton(
-              onPressed: _saving ? null : _save,
+              onPressed: _saving || _changeCount == 0 ? null : _save,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
+                disabledBackgroundColor: AppColors.surfaceAlt,
+                disabledForegroundColor: AppColors.textFaint,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               child: _saving
@@ -1847,7 +1911,7 @@ class _ManualAttendanceScreenState extends State<ManualAttendanceScreen> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: AppColors.onPrimary),
                     )
-                  : Text('SAVE ($_changeCount)',
+                  : Text('VERIFY SELECTED ($_changeCount)',
                       style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
           ),
