@@ -2141,6 +2141,26 @@ class ApiService {
     return await deleteRequest(baseUrl1, '$_employee/$id');
   }
 
+  // --- Employee child rows -------------------------------------------------
+  //
+  // Removing an education, family or experience row needs its own delete call.
+  // The employee update is an UPSERT: it walks the lists it is given and
+  // updates or inserts each row, but never removes one that is missing. So a
+  // row dropped from the form and then saved would simply stay in the
+  // database. The web deletes it the moment the row is removed, and so do we.
+
+  static Future<http.Response> deleteEmployeeEducation(int id) async {
+    return await deleteRequest(baseUrl1, 'api/hrm/employee-education/$id');
+  }
+
+  static Future<http.Response> deleteEmployeeFamily(int id) async {
+    return await deleteRequest(baseUrl1, 'api/hrm/employee-family/$id');
+  }
+
+  static Future<http.Response> deleteEmployeeExperience(int id) async {
+    return await deleteRequest(baseUrl1, 'api/hrm/employee-experience/$id');
+  }
+
   /// One reference row looked up by its key rather than by its type.
   ///
   /// Used for the form-status ids the save carries ('ews' when an employee is

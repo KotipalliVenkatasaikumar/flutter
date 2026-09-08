@@ -20,9 +20,14 @@ import 'package:intl/intl.dart';
 ///
 /// Basic, Position, Address, Education, Bank, Family, Experience and Documents
 /// are one save, not eight. Both write endpoints take the whole EmployeeSaveDto
-/// and REPLACE what is stored with it — so an edit loads the full record first
-/// and changes it in place. Building the payload from a blank form would wipe
-/// every section the form did not fill.
+/// — so an edit loads the full record first and changes it in place. Building
+/// the payload from a blank form would wipe every section the form did not
+/// fill.
+///
+/// The save UPSERTS the repeated sections rather than replacing them: the
+/// backend walks each list and updates or inserts every row it is handed, and
+/// never deletes one that is absent. Dropping a saved education, family or
+/// experience row therefore takes its own DELETE call — see [_removeChildRow].
 ///
 /// The sections are collapsible rather than a wizard: a supervisor adding a
 /// guard fills Basic and Position and saves, while HR correcting a bank account
@@ -52,7 +57,6 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
 
   // Reference data for the dropdowns, all served rather than written here.
   List<RefOption> _departments = [];
-  List<RefOption> _designations = [];
   List<RefOption> _shifts = [];
   List<RefOption> _divisions = [];
   List<RefOption> _costCentres = [];
@@ -184,9 +188,10 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
         RefOption.fromJson,
         type);
 
+    // Designation is a free-text field, matching the web, so
+    // `Designation_Type` is deliberately not fetched here.
     final results = await Future.wait([
       refs('Department_Type'),
-      refs('Designation_Type'),
       refs('Shift_Timings'),
       refs('Divisions'),
       refs('cost_center'),
@@ -206,18 +211,17 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
 
     if (!mounted) return;
     _departments = results[0] as List<RefOption>;
-    _designations = results[1] as List<RefOption>;
-    _shifts = results[2] as List<RefOption>;
-    _divisions = results[3] as List<RefOption>;
-    _costCentres = results[4] as List<RefOption>;
-    _grades = results[5] as List<RefOption>;
-    _qualifications = results[6] as List<RefOption>;
-    _qualificationAreas = results[7] as List<RefOption>;
-    _employeeStatuses = results[8] as List<RefOption>;
-    _managers = results[9] as List<ManagerOption>;
-    _roles = results[10] as List<RoleOption>;
-    _projects = results[11] as List<ProjectOption>;
-    _workLocations = results[12] as List<WorkLocationOption>;
+    _shifts = results[1] as List<RefOption>;
+    _divisions = results[2] as List<RefOption>;
+    _costCentres = results[3] as List<RefOption>;
+    _grades = results[4] as List<RefOption>;
+    _qualifications = results[5] as List<RefOption>;
+    _qualificationAreas = results[6] as List<RefOption>;
+    _employeeStatuses = results[7] as List<RefOption>;
+    _managers = results[8] as List<ManagerOption>;
+    _roles = results[9] as List<RoleOption>;
+    _projects = results[10] as List<ProjectOption>;
+    _workLocations = results[11] as List<WorkLocationOption>;
   }
 
   // ------------------------------------------------------------------ save
@@ -242,16 +246,46 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       _toast('Date of joining is required.', error: true);
       return;
     }
+    // Chips are outside the Form, so this is checked by hand. Attendance calls
+    // `employee.getShift().equals("Yes")` with no null guard, so saving without
+    // an answer leaves a record that later breaks a punch.
+    if (_dto.employeeBean.shift.trim().isEmpty) {
+      _openSection('position');
+      _toast('Choose Yes or No for rotational shift.', error: true);
+      return;
+    }
+    if (_dto.employeeBean.isInProbation.trim().isEmpty) {
+      _openSection('position');
+      _toast('Choose Yes or No for probation.', error: true);
+      return;
+    }
+    // Aadhaar is the one document the web insists on — satisfied by a file
+    // picked now or one already on the record.
+    if (_pickedDocuments['adharUrl'] == null &&
+        _dto.employeeBean.adharUrl.trim().isEmpty) {
+      _openSection('documents');
+      _toast('Upload the Aadhaar document.', error: true);
+      return;
+    }
 
     setState(() => _saving = true);
     try {
       _dto.employeeBean.organizationId = _organizationId;
-      // The form-status id is reference data, not a constant: 'ews' marks a
-      // newly submitted employee and 'esd' one that has been sent on. The web
-      // resolves it the same way rather than hard-coding the number.
-      final statusId = await _formStatusId(_isEdit ? 'esd' : 'ews');
-      if (statusId != null) {
-        _dto.employeeBean.formStatusOne = statusId;
+      // Only a NEW employee gets a form status stamped here. 'ews' is
+      // reference data, not a constant, so it is resolved rather than
+      // hard-coded — the same thing the web's saveEmployee does.
+      //
+      // An edit deliberately leaves formStatusOne exactly as it was loaded.
+      // Setting it to 'esd' ("Submitted") makes the backend treat the save as
+      // a submission for approval and look up the "Employee Stages" workflow,
+      // which fails with "No Record Found with given name" wherever that
+      // workflow is not configured. The web only stamps 'esd' from its
+      // separate declaration action, never from the normal UPDATE button.
+      if (!_isEdit) {
+        final statusId = await _formStatusId('ews');
+        if (statusId != null) {
+          _dto.employeeBean.formStatusOne = statusId;
+        }
       }
 
       final payload = jsonEncode(_dto.toJson());
@@ -323,6 +357,39 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     }
     _openSection('position');
     return 'Position details are incomplete.';
+  }
+
+  /// Drops one row of a repeated section, deleting it on the server first when
+  /// it has already been saved.
+  ///
+  /// A row with `id == 0` has never been stored, so removing it locally is the
+  /// whole job. A saved row has to be deleted through its own endpoint — the
+  /// employee save upserts and would leave it behind. The row only leaves the
+  /// form once the server has accepted the delete, so a failure cannot make it
+  /// look gone when it is still on the record.
+  Future<void> _removeChildRow({
+    required int id,
+    required Future<dynamic> Function(int) delete,
+    required VoidCallback removeLocally,
+    required String what,
+  }) async {
+    if (id > 0) {
+      try {
+        final response = await delete(id);
+        if (!ApiService.isSuccess(response.statusCode)) {
+          debugPrint('Employee form: delete $what failed '
+              '${response.statusCode} ${response.body}');
+          _toast('Could not remove this $what. Please try again.', error: true);
+          return;
+        }
+      } catch (e) {
+        debugPrint('Employee form: delete $what error $e');
+        _toast('Could not reach the server. Please try again.', error: true);
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(removeLocally);
   }
 
   void _openSection(String key) {
@@ -659,17 +726,31 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
         ),
         _field('policeStationLimits', 'Police station limits',
             bean.policeStationLimits, (v) => bean.policeStationLimits = v),
+        // Entered, not derived. Neither the web nor the backend works it out
+        // from the date of birth, so a form that skipped it would leave the
+        // column empty on every employee added from a phone.
+        _field('age', 'Age', bean.age?.toString() ?? '',
+            (v) => bean.age = int.tryParse(v.trim()),
+            keyboardType: TextInputType.number, digitsOnly: true, maxLength: 3),
         _row(
           _field('esiNumber', 'ESI number', bean.esiNumber,
               (v) => bean.esiNumber = v),
           _field('pfUanNo', 'PF UAN number', bean.pfUanNo,
               (v) => bean.pfUanNo = v),
         ),
+        // Locked once the answer is Yes on an existing employee: the login has
+        // already been created, so switching it off here would not remove it.
+        // The web disables the same control under the same condition.
         _choice(
-            'Create a login for this employee',
-            bean.isAddAsUserNeeded,
-            const ['Yes', 'No'],
-            (v) => setState(() => bean.isAddAsUserNeeded = v)),
+          'Create a login for this employee',
+          bean.isAddAsUserNeeded,
+          const ['Yes', 'No'],
+          (v) => setState(() => bean.isAddAsUserNeeded = v),
+          enabled: !(_isEdit && bean.isAddAsUserNeeded == 'Yes'),
+          note: _isEdit && bean.isAddAsUserNeeded == 'Yes'
+              ? 'This employee already has a login, so this cannot be changed here.'
+              : null,
+        ),
       ],
     );
   }
@@ -738,28 +819,52 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
         _refDropdown('Department', _departments, bean.department,
             (v) => setState(() => bean.department = v),
             required: true),
-        _refDropdownByValue('Designation', _designations, bean.designation,
-            (v) => setState(() => bean.designation = v),
+        // Free text, not a dropdown. `Designation_Type` reference data exists
+        // and the web still fetches it, but the web's field is a plain input
+        // and the column is a varchar — a dropdown here would refuse the
+        // designations already on record that are not in that list.
+        _field('designation', 'Designation', bean.designation,
+            (v) => bean.designation = v,
             required: true),
         _refDropdown('Shift', _shifts, bean.shiftId,
             (v) => setState(() => bean.shiftId = v),
             required: true),
-        // `shift` is a second, free-text column alongside shiftId. The web
-        // requires both, so the chosen shift's label is mirrored into it.
-        _field('shift', 'Shift label', bean.shift, (v) => bean.shift = v,
-            required: true),
+        // `shift` is NOT a label for shiftId — it is the rotational-shift flag,
+        // and attendance reads it as `employee.getShift().equals("Yes")`. Free
+        // text here would write something that comparison can never match.
+        _choice('Rotational shift', bean.shift, const ['Yes', 'No'],
+            (v) => setState(() => bean.shift = v)),
         _refDropdownByValue('Employee status', _employeeStatuses,
             bean.employeeStatus, (v) => setState(() => bean.employeeStatus = v),
             required: true),
         _choice('In probation', bean.isInProbation, const ['Yes', 'No'],
-            (v) => setState(() => bean.isInProbation = v)),
-        _field(
-            'probationPeriod',
-            'Probation period (months)',
-            bean.probationPeriod?.toString() ?? '',
-            (v) => bean.probationPeriod = int.tryParse(v.trim()),
-            keyboardType: TextInputType.number,
-            digitsOnly: true),
+            (v) => setState(() {
+                  bean.isInProbation = v;
+                  // Turning probation off clears the period, as the web does —
+                  // otherwise a stale number is saved against an employee who
+                  // is no longer on probation.
+                  if (v != 'Yes') {
+                    bean.probationPeriod = 0;
+                    _setText('probationPeriod', '0');
+                  }
+                }),
+            required: true),
+        // Only asked for while probation is on, and then it must be a real
+        // number of days — the web hides the field and drops its validators
+        // the moment probation is switched off.
+        if (bean.isInProbation == 'Yes')
+          _field(
+              'probationPeriod',
+              'Probation period (days)',
+              bean.probationPeriod?.toString() ?? '',
+              (v) => bean.probationPeriod = int.tryParse(v.trim()),
+              required: true,
+              keyboardType: TextInputType.number,
+              digitsOnly: true, validator: (value) {
+            final days = int.tryParse((value ?? '').trim());
+            if (days == null || days < 1) return 'Enter probation period days';
+            return null;
+          }),
         _dateField('Confirmation date', bean.confirmationDate,
             (d) => setState(() => bean.confirmationDate = d)),
         _refDropdown('Division', _divisions, bean.divisionId,
@@ -828,8 +933,15 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                 fontSize: 12,
                 fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
+        // Nothing is selected until one is chosen. Both addresses start at
+        // 'No', so defaulting the display to Temporary claimed a choice the
+        // record had not been given.
         _choiceRaw(
-          permanent.isPointOfContact == 'Yes' ? 'Permanent' : 'Temporary',
+          permanent.isPointOfContact == 'Yes'
+              ? 'Permanent'
+              : temporary.isPointOfContact == 'Yes'
+                  ? 'Temporary'
+                  : '',
           const ['Permanent', 'Temporary'],
           (v) => setState(() {
             final isPermanent = v == 'Permanent';
@@ -923,8 +1035,13 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           return _repeatable(
             title: 'Education ${index + 1}',
             onRemove: _dto.employeeEducationBeanList.length > 1
-                ? () => setState(
-                    () => _dto.employeeEducationBeanList.removeAt(index))
+                ? () => _removeChildRow(
+                      id: row.id,
+                      delete: ApiService.deleteEmployeeEducation,
+                      removeLocally: () =>
+                          _dto.employeeEducationBeanList.removeAt(index),
+                      what: 'education entry',
+                    )
                 : null,
             children: [
               _refDropdown('Qualification', _qualifications, row.qualification,
@@ -1030,8 +1147,13 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           return _repeatable(
             title: 'Member ${index + 1}',
             onRemove: _dto.employeeFamilyBeanList.length > 1
-                ? () =>
-                    setState(() => _dto.employeeFamilyBeanList.removeAt(index))
+                ? () => _removeChildRow(
+                      id: row.id,
+                      delete: ApiService.deleteEmployeeFamily,
+                      removeLocally: () =>
+                          _dto.employeeFamilyBeanList.removeAt(index),
+                      what: 'family member',
+                    )
                 : null,
             children: [
               _field('fam${index}Name', 'Name', row.name, (v) => row.name = v),
@@ -1095,8 +1217,13 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           return _repeatable(
             title: 'Experience ${index + 1}',
             onRemove: _dto.employeeExperienceBeanList.length > 1
-                ? () => setState(
-                    () => _dto.employeeExperienceBeanList.removeAt(index))
+                ? () => _removeChildRow(
+                      id: row.id,
+                      delete: ApiService.deleteEmployeeExperience,
+                      removeLocally: () =>
+                          _dto.employeeExperienceBeanList.removeAt(index),
+                      what: 'experience entry',
+                    )
                 : null,
             children: [
               _field('exp${index}Company', 'Company', row.companyName,
@@ -1135,7 +1262,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       title: 'Documents',
       icon: Icons.folder_outlined,
       subtitle: _pickedDocuments.isEmpty
-          ? 'Aadhaar, PAN, Voter ID, Passport, Ration card'
+          ? 'Aadhaar required · PAN, Voter ID, Passport, Ration card'
           : '${_pickedDocuments.length} ready to upload',
       children: [
         for (final slot in _documentSlots) _documentRow(slot),
@@ -1360,23 +1487,30 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
   /// A short fixed list, as chips. Faster than a dropdown for two or three
   /// options and shows what was chosen without opening anything.
   Widget _choice(String label, String value, List<String> options,
-      ValueChanged<String> onChanged) {
+      ValueChanged<String> onChanged,
+      {bool required = false, bool enabled = true, String? note}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
+          Text(required ? '$label *' : label,
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
           const SizedBox(height: 6),
-          _choiceRaw(value, options, onChanged),
+          _choiceRaw(value, options, onChanged, enabled: enabled),
+          if (note != null) ...[
+            const SizedBox(height: 5),
+            Text(note,
+                style: TextStyle(color: AppColors.textFaint, fontSize: 11)),
+          ],
         ],
       ),
     );
   }
 
   Widget _choiceRaw(
-      String value, List<String> options, ValueChanged<String> onChanged) {
+      String value, List<String> options, ValueChanged<String> onChanged,
+      {bool enabled = true}) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -1388,13 +1522,22 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           showCheckmark: false,
           backgroundColor: AppColors.surfaceAlt,
           selectedColor: AppColors.primary,
+          // A locked chip still has to show which way it is set, so the
+          // selected one keeps the brand fill and only dims.
+          disabledColor: selected
+              ? AppColors.primary.withOpacity(0.55)
+              : AppColors.surfaceAlt,
           side: BorderSide(color: AppColors.divider),
           labelStyle: TextStyle(
-            color: selected ? AppColors.onPrimary : AppColors.textSecondary,
+            color: selected
+                ? AppColors.onPrimary
+                : enabled
+                    ? AppColors.textSecondary
+                    : AppColors.textFaint,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
-          onSelected: (_) => onChanged(option),
+          onSelected: enabled ? (_) => onChanged(option) : null,
         );
       }).toList(),
     );
